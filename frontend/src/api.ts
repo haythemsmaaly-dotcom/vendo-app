@@ -65,6 +65,21 @@ export type Item = {
   sold_at?: string | null;
 };
 
+export type AnalyzedItem = {
+  name: string;
+  brand: string;
+  model?: string | null;
+  category: string;
+  condition: string;
+  confidence: number;
+  missing_info: string[];
+  photo_coach: string[];
+  market_low: number;
+  market_high: number;
+  keywords: string[];
+  description: string;
+};
+
 export const api = {
   list: () => fetch(`${API_BASE}/items`).then(r => j<Item[]>(r)),
   get: (id: string) => fetch(`${API_BASE}/items/${id}`).then(r => j<Item>(r)),
@@ -92,4 +107,10 @@ export const api = {
         average_sale_price: number;
       }>(r),
     ),
+  analyze: (photos: string[]) =>
+    fetch(`${API_BASE}/analyze`, {
+      method: 'POST',
+      headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify({ photos }),
+    }).then(r => j<AnalyzedItem>(r)),
 };

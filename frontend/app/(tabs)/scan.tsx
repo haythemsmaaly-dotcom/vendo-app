@@ -113,7 +113,14 @@ export default function ScanScreen() {
     }
 
     try {
-      const entry = pickRandom(CATALOG);
+      // Real vision AI first, silent fallback to mock catalog if it fails
+      let entry: any;
+      try {
+        entry = await api.analyze(photos);
+      } catch (aiErr) {
+        console.warn("Vision AI unavailable, using catalog fallback:", aiErr);
+        entry = pickRandom(CATALOG);
+      }
       const strategies = computePriceStrategies(entry.market_low, entry.market_high);
       const smart = strategies.find(s => s.key === "smart")!.price;
       const sellPlan = computeSellPlan("balanced", smart, entry.market_low);

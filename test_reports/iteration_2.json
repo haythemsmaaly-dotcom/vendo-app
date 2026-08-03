@@ -1,0 +1,49 @@
+{
+  "summary": "Iteration 2 — tested new POST /api/analyze (Gemini 3 Flash vision) + regression on CRUD/stats + frontend scan flow with silent fallback. Real vision AI works: recognized sneaker, watch and headphones from base64 JPEGs (downloaded from Unsplash/Pexels, resized to 800px). All 12 AnalyzedItem schema fields present and typed correctly, condition ∈ Neuf/Très bon/Bon/Correct/Usé, confidence in 0-100, market_low<=market_high, French text confirmed. Empty photos list returns 400 as expected. Multiple images (3) returns valid JSON. Backend CRUD/stats (10/10) unchanged. Frontend scan sample→analyze→results→detail flow works: /api/analyze receives a raw URL (not base64), backend calls Gemini which rejects it → 502, and the frontend silently falls back to the mock catalog with no error popup. UI is unchanged (same tabs, same dark charcoal + electric-lime theme).",
+  "backend_issues": {
+    "critical": [],
+    "minor": [
+      {
+        "endpoint": "POST /api/analyze",
+        "issue": "Invalid base64 string returns 502 instead of 400 as required by the review spec. Root cause: server.py:270 uses base64.b64decode(raw[:64] + '==', validate=False), which silently ignores non-base64 characters. The bad payload is forwarded to Gemini, which then rejects it, and the LlmChat exception is caught and re-raised as 502. Fix suggestion: validate with base64.b64decode(raw, validate=True) inside a binascii.Error try/except, and skip/reject any photo that fails; return 400 when the resulting images list is empty (that branch already exists at line 275)."
+      }
+    ]
+  },
+  "frontend_issues": {
+    "ui_bugs": [],
+    "integration_issues": [],
+    "design_issues": [
+      {"screen": "global", "issues": ["Console warns 'shadow*' style props deprecated (use boxShadow) and props.pointerEvents deprecated (use style.pointerEvents) — non-blocking React Native Web deprecation notices, carried over from iteration 1."]}
+    ],
+    "react_native_issues": []
+  },
+  "test_report_links": [
+    "/app/backend/tests/test_analyze.py",
+    "/app/backend/tests/test_vendo_api.py",
+    "/app/test_reports/pytest/pytest_analyze.xml",
+    "/app/test_reports/pytest/pytest_results.xml"
+  ],
+  "action_items": [
+    "Backend: fix /api/analyze invalid-base64 handling to return 400 (see minor issue above). Only strict validation is missing; the 400-when-no-valid-image branch already exists — just make _strip_data_uri + base64.b64decode(..., validate=True) actually raise for non-base64 input.",
+    "Optional: also skip photos whose decoded bytes don't start with a known JPEG/PNG/WEBP magic number, to protect against garbage payloads reaching Gemini and causing 502.",
+    "(Carried over) Silence RN Web deprecation warnings by migrating shadow* → boxShadow and props.pointerEvents → style.pointerEvents."
+  ],
+  "critical_code_review_comments": [
+    "server.py `_strip_data_uri` + b64decode sanity check is a no-op with validate=False; misleading — either remove or replace with strict validation.",
+    "server.py: on Gemini failure the endpoint returns 502 with the raw exception string in `detail` — safe for now but exposes stack context; consider a generic message and log server-side only.",
+    "server.py: `AnalyzedItem.brand` is required non-empty string, but the coerce path uses default 'Inconnu' — good. However `market_low`/`market_high` fallbacks (line 313-316) can invert if both are 0 (both stay 0 → then high becomes 10, low becomes 5). Minor; acceptable.",
+    "server.py Item.strategies not validated to contain exactly {fast, smart, max}; frontend assumes this shape (unchanged from iteration 1)."
+  ],
+  "updated_files": [
+    "/app/backend/tests/test_analyze.py (created — 5 tests, 4 pass, 1 documents the invalid-base64 bug)"
+  ],
+  "success_rate": {
+    "backend": "93% (14/15 — 10/10 CRUD+stats + 4/5 /api/analyze; the 1 failure documents the invalid-base64 → should-be-400 spec deviation)",
+    "frontend": "100% (scan sample → analyze → silent fallback → results → detail navigation all functional; UI unchanged)"
+  },
+  "seed_data_creation": "None. Two draft items were created via the scan flow (one during iteration 1, one during iteration 2 UI test — visible as random catalog entries in DB, expected behavior). One TEST_ item was created & deleted by test_vendo_api CRUD tests.",
+  "retest_needed": true,
+  "should_main_agent_self_test": true,
+  "context_for_next_testing_agent": "Reuse /app/backend/tests/test_analyze.py — it downloads Unsplash/Pexels images, resizes to 800px, base64-encodes, and hits /api/analyze. Each real-AI test takes ~15-25s (Gemini 3 Flash). Empty-photos test expects 400 (works). Invalid-base64 test currently expects 400 and will pass ONLY after the main agent fixes the validation (currently server returns 502). Frontend testIDs of interest for scan: scan-sample-btn, analyze-btn, analyzing-view, results-view, open-result-btn. Frontend fallback correctly triggers on ANY /api/analyze failure and creates a real DB item using pickRandom(CATALOG); it does NOT show any error popup, matching the spec.",
+  "rca_of_issue": "Bug: POST /api/analyze with an invalid base64 string returns 502 instead of 400. Reproduction: `curl -X POST $EXPO_PUBLIC_BACKEND_URL/api/analyze -H 'Content-Type: application/json' -d '{\"photos\":[\"!!!not-base64###\"]}'` → HTTP 502 (backend log shows LiteLLM error: 'Invalid value at contents[0].parts[1].inline_data.data (TYPE_BYTES), Base64 decoding failed'). Root cause: /app/backend/server.py:268-273 attempts `base64.b64decode(raw[:64] + '==', validate=False)` as a sanity check; with validate=False, b64decode silently ignores invalid characters and returns whatever bytes it can, so the `continue` branch is never taken, and the bad payload reaches Gemini. Mitigation: change to `validate=True` and catch `binascii.Error` (and optionally verify the decoded bytes start with FF D8 (JPEG), 89 50 (PNG) or 52 49 46 46 (WEBP RIFF)). The existing 400 branch at line 275 will then fire correctly when no valid image remains."
+}

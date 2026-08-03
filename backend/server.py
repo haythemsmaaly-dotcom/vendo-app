@@ -3,12 +3,17 @@ from dotenv import load_dotenv
 from starlette.middleware.cors import CORSMiddleware
 from motor.motor_asyncio import AsyncIOMotorClient
 import os
+import re
+import json
+import base64
 import logging
 from pathlib import Path
 from pydantic import BaseModel, Field
 from typing import List, Optional, Dict, Any
 import uuid
 from datetime import datetime, timezone
+
+from emergentintegrations.llm.chat import LlmChat, UserMessage, ImageContent
 
 
 ROOT_DIR = Path(__file__).parent
@@ -157,6 +162,196 @@ async def stats():
         "total_earned": round(total_earned, 2),
         "average_sale_price": round(avg, 2),
     }
+
+
+# --------- Vision AI: item identification ---------
+class AnalyzeRequest(BaseModel):
+    photos: List[str]  # data URIs or raw base64 strings (JPEG/PNG/WEBP)
+
+
+class AnalyzedItem(BaseModel):
+    name: str
+    brand: str
+    model: Optional[str] = None
+    category: str
+    condition: str
+    confidence: int
+    missing_info: List[str] = []
+    photo_coach: List[str] = []
+    market_low: float
+    market_high: float
+    keywords: List[str] = []
+    description: str
+
+
+VISION_SYSTEM_PROMPT = """Tu es Vendo, un expert en reconnaissance d'objets et estimation de prix pour la revente d'occasion (marché européen en euros).
+
+À partir d'une ou plusieurs photos d'un objet, tu identifies l'objet et retournes UNIQUEMENT un objet JSON valide (aucun texte autour, aucun bloc markdown).
+
+Le JSON doit contenir exactement ces champs :
+{
+  "name": "Nom de l'objet (ex: Air Jordan 1 High, Casque Sony WH-1000XM5)",
+  "brand": "Marque (ex: Nike, Sony, Apple)",
+  "model": "Référence exacte du modèle si identifiable, sinon null",
+  "category": "Une des catégories: Sneakers, Vêtements, Sacs, Montres, Audio, Téléphones, Tablettes, Ordinateurs, Consoles, Jeux vidéo, Livres, Décoration, Meubles, Bijoux, Instruments, Sport, Jouets, Autre",
+  "condition": "Neuf | Très bon | Bon | Correct | Usé  (basé sur ce que tu vois)",
+  "confidence": 0-100,
+  "missing_info": ["Informations manquantes qui aideraient à mieux évaluer, en français, max 3"],
+  "photo_coach": ["Photos additionnelles à prendre pour améliorer l'annonce, en français, max 3"],
+  "market_low": nombre en EUR (borne basse réaliste du marché d'occasion actuel),
+  "market_high": nombre en EUR (borne haute réaliste),
+  "keywords": ["5-8 mots-clés français pour l'annonce"],
+  "description": "Description d'annonce professionnelle en français, 2-4 phrases, mettant en valeur l'objet et son état"
+}
+
+Règles strictes:
+- Si tu ne reconnais pas l'objet, mets confidence bas (<50) mais renvoie quand même une estimation raisonnable.
+- market_low et market_high doivent être cohérents (low < high) et refléter le marché de l'occasion, pas le neuf.
+- Utilise TOUJOURS le français pour tous les textes.
+- Retourne UNIQUEMENT le JSON, sans commentaire, sans balise markdown."""
+
+
+def _extract_json(text: str) -> Optional[dict]:
+    """Robustly extract a JSON object from an LLM response."""
+    if not text:
+        return None
+    # Strip common markdown fences
+    m = re.search(r"```(?:json)?\s*(\{.*?\})\s*```", text, re.DOTALL)
+    if m:
+        try:
+            return json.loads(m.group(1))
+        except Exception:
+            pass
+    # Try full text
+    try:
+        return json.loads(text)
+    except Exception:
+        pass
+    # Extract first {...} balanced block
+    depth = 0
+    start = -1
+    for i, ch in enumerate(text):
+        if ch == "{":
+            if depth == 0:
+                start = i
+            depth += 1
+        elif ch == "}":
+            depth -= 1
+            if depth == 0 and start >= 0:
+                try:
+                    return json.loads(text[start:i+1])
+                except Exception:
+                    start = -1
+    return None
+
+
+def _strip_data_uri(s: str) -> str:
+    if s.startswith("data:"):
+        comma = s.find(",")
+        if comma >= 0:
+            return s[comma+1:]
+    return s
+
+
+@api_router.post("/analyze", response_model=AnalyzedItem)
+async def analyze_item(req: AnalyzeRequest):
+    api_key = os.environ.get("EMERGENT_LLM_KEY", "")
+    if not api_key:
+        raise HTTPException(status_code=500, detail="EMERGENT_LLM_KEY not configured")
+    if not req.photos:
+        raise HTTPException(status_code=400, detail="At least one photo required")
+
+    # Prepare up to 3 images
+    images: List[ImageContent] = []
+    for p in req.photos[:3]:
+        raw = _strip_data_uri(p)
+        # Sanity-check base64
+        try:
+            base64.b64decode(raw[:64] + "==", validate=False)
+        except Exception:
+            continue
+        images.append(ImageContent(image_base64=raw))
+
+    if not images:
+        raise HTTPException(status_code=400, detail="No valid base64 image provided")
+
+    chat = LlmChat(
+        api_key=api_key,
+        session_id=f"vendo-analyze-{uuid.uuid4().hex[:8]}",
+        system_message=VISION_SYSTEM_PROMPT,
+    ).with_model("gemini", "gemini-3-flash-preview")
+
+    user_msg = UserMessage(
+        text="Identifie cet objet et retourne le JSON demandé.",
+        file_contents=images,
+    )
+
+    try:
+        response = await chat.send_message(user_msg)
+    except Exception as e:
+        logger.exception("Vision LLM call failed")
+        raise HTTPException(status_code=502, detail=f"Vision AI unavailable: {e}")
+
+    text = response if isinstance(response, str) else str(response)
+    data = _extract_json(text)
+    if not data:
+        logger.warning("Could not parse JSON from vision response: %r", text[:400])
+        raise HTTPException(status_code=502, detail="Vision AI returned unparseable response")
+
+    # Coerce / validate fields with sensible defaults
+    def _s(v, default=""): return str(v) if v is not None else default
+    def _list(v):
+        if isinstance(v, list):
+            return [str(x) for x in v if x is not None][:8]
+        return []
+
+    try:
+        low = float(data.get("market_low") or 0)
+        high = float(data.get("market_high") or 0)
+        if high < low:
+            low, high = high, low
+        if high == 0:
+            high = max(low * 1.5, 10.0)
+        if low == 0:
+            low = max(high * 0.5, 5.0)
+
+        cond = _s(data.get("condition"), "Bon")
+        valid_cond = {"Neuf", "Très bon", "Bon", "Correct", "Usé"}
+        if cond not in valid_cond:
+            # Best-effort mapping
+            low_cond = cond.lower()
+            if "neuf" in low_cond:
+                cond = "Neuf"
+            elif "très" in low_cond or "excellent" in low_cond:
+                cond = "Très bon"
+            elif "correct" in low_cond or "moyen" in low_cond:
+                cond = "Correct"
+            elif "usé" in low_cond or "abîmé" in low_cond:
+                cond = "Usé"
+            else:
+                cond = "Bon"
+
+        confidence = int(data.get("confidence") or 60)
+        confidence = max(0, min(100, confidence))
+
+        result = AnalyzedItem(
+            name=_s(data.get("name"), "Objet"),
+            brand=_s(data.get("brand"), "Inconnu"),
+            model=_s(data.get("model")) or None,
+            category=_s(data.get("category"), "Autre"),
+            condition=cond,
+            confidence=confidence,
+            missing_info=_list(data.get("missing_info"))[:3],
+            photo_coach=_list(data.get("photo_coach"))[:3],
+            market_low=round(low, 2),
+            market_high=round(high, 2),
+            keywords=_list(data.get("keywords"))[:8],
+            description=_s(data.get("description"), "Objet en bon état, à saisir."),
+        )
+        return result
+    except Exception as e:
+        logger.exception("Vision response validation failed")
+        raise HTTPException(status_code=502, detail=f"Invalid vision output: {e}")
 
 
 app.include_router(api_router)
