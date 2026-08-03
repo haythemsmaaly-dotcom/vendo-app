@@ -6,6 +6,7 @@ import os
 import re
 import json
 import base64
+import binascii
 import logging
 from pathlib import Path
 from pydantic import BaseModel, Field
@@ -265,10 +266,20 @@ async def analyze_item(req: AnalyzeRequest):
     images: List[ImageContent] = []
     for p in req.photos[:3]:
         raw = _strip_data_uri(p)
-        # Sanity-check base64
+        if not raw or len(raw) < 32:
+            continue
+        # Strict base64 validation on a small prefix (enough to catch garbage)
+        sample = raw[: (len(raw) // 4) * 4]  # multiple of 4
         try:
-            base64.b64decode(raw[:64] + "==", validate=False)
-        except Exception:
+            decoded_head = base64.b64decode(sample[:512], validate=True)
+        except (binascii.Error, ValueError):
+            continue
+        # Magic-byte check: JPEG (FFD8FF), PNG (89504E47), WEBP (RIFF....WEBP)
+        if not (
+            decoded_head.startswith(b"\xff\xd8\xff")
+            or decoded_head.startswith(b"\x89PNG\r\n\x1a\n")
+            or (decoded_head[:4] == b"RIFF" and decoded_head[8:12] == b"WEBP")
+        ):
             continue
         images.append(ImageContent(image_base64=raw))
 
