@@ -24,11 +24,23 @@ export const theme = {
   },
   radius: { sm: 8, md: 16, lg: 24, pill: 999 },
   font: {
-    display: 'System',
-    text: 'System',
+    // Display / numbers / prices
+    displayMedium: 'SpaceGrotesk-Medium',
+    displayBold: 'SpaceGrotesk-Bold',
+    // Text / body
+    text: 'Inter-Regular',
+    textMedium: 'Inter-Medium',
+    textSemi: 'Inter-SemiBold',
+    textBold: 'Inter-Bold',
   },
   size: {
     xs: 11, sm: 13, base: 15, lg: 17, xl: 20, xxl: 26, xxxl: 34, mega: 48, hero: 60,
+  },
+  motion: {
+    fast: 180,
+    base: 260,
+    slow: 420,
+    score: 900,
   },
 };
 

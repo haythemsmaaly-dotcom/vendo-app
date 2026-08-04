@@ -1,6 +1,6 @@
 import React, { useEffect, useRef, useState } from "react";
 import {
-  View, Text, StyleSheet, Pressable, ScrollView, ActivityIndicator, Platform,
+  View, Text, StyleSheet, ScrollView,
 } from "react-native";
 import { SafeAreaView } from "react-native-safe-area-context";
 import { Image } from "expo-image";
@@ -10,42 +10,55 @@ import { useRouter } from "expo-router";
 import * as ImagePicker from "expo-image-picker";
 import * as Haptics from "expo-haptics";
 import Animated, {
-  useSharedValue, useAnimatedStyle, withRepeat, withTiming, withSequence, Easing,
+  useSharedValue, useAnimatedStyle, withRepeat, withTiming, withSequence, Easing, FadeIn, FadeInDown, FadeOut,
 } from "react-native-reanimated";
 
-import { theme, formatEUR } from "@/src/theme";
-import { api } from "@/src/api";
+import { theme, formatEUR, conditionColor } from "@/src/theme";
+import { api, Item, AnalyzedItem } from "@/src/api";
 import { CATALOG, pickRandom, computePriceStrategies, computeSellPlan, computeSellScore } from "@/src/catalog";
+import PressableScale from "@/src/components/PressableScale";
+import SellScoreRing from "@/src/components/SellScoreRing";
 
-type Phase = "idle" | "preview" | "analyzing" | "results";
+type Phase = "idle" | "preview" | "analyzing" | "results" | "error";
+
+const PROGRESS_STEPS = [
+  "Je regarde vos photos…",
+  "J'identifie le produit…",
+  "Je consulte le marché…",
+  "Je peaufine votre annonce…",
+  "Je calcule votre Sell Score…",
+];
 
 export default function ScanScreen() {
   const router = useRouter();
   const [phase, setPhase] = useState<Phase>("idle");
   const [photos, setPhotos] = useState<string[]>([]);
   const [progress, setProgress] = useState(0);
-  const [step, setStep] = useState("Analyse de l'image...");
+  const [stepIdx, setStepIdx] = useState(0);
   const [error, setError] = useState<string | null>(null);
+  const [errorTitle, setErrorTitle] = useState<string>("Analyse impossible");
+  const [previewItem, setPreviewItem] = useState<Item | null>(null);
   const createdIdRef = useRef<string | null>(null);
 
+  // Scanline animation
   const scan = useSharedValue(0);
   useEffect(() => {
     if (phase === "analyzing") {
       scan.value = 0;
-      scan.value = withRepeat(withTiming(1, { duration: 1400, easing: Easing.inOut(Easing.quad) }), -1, true);
+      scan.value = withRepeat(withTiming(1, { duration: 1600, easing: Easing.inOut(Easing.quad) }), -1, true);
     }
   }, [phase, scan]);
 
   const scanStyle = useAnimatedStyle(() => ({
     transform: [{ translateY: scan.value * 260 - 130 }],
-    opacity: 0.7 + scan.value * 0.3,
+    opacity: 0.65 + scan.value * 0.35,
   }));
 
   const pulse = useSharedValue(1);
   useEffect(() => {
     pulse.value = withRepeat(withSequence(
-      withTiming(1.05, { duration: 900 }),
-      withTiming(1, { duration: 900 }),
+      withTiming(1.04, { duration: 1100, easing: Easing.inOut(Easing.quad) }),
+      withTiming(1, { duration: 1100, easing: Easing.inOut(Easing.quad) }),
     ), -1, true);
   }, [pulse]);
   const pulseStyle = useAnimatedStyle(() => ({ transform: [{ scale: pulse.value }] }));
@@ -89,99 +102,135 @@ export default function ScanScreen() {
   };
 
   const useSampleImage = () => {
+    // Local demo: bypasses real AI and produces a full sample item.
+    // This is the ONLY place the mock catalog is still used deliberately.
     const entry = pickRandom(CATALOG);
-    addPhoto(entry.fallbackPhoto);
+    setPhotos([entry.fallbackPhoto]);
+    setPhase("preview");
   };
 
+  const buildAndCreateItem = async (entry: AnalyzedItem | any, isSample: boolean) => {
+    const strategies = computePriceStrategies(entry.market_low, entry.market_high);
+    const smart = strategies.find(s => s.key === "smart")!.price;
+    const sellPlan = computeSellPlan("balanced", smart, entry.market_low);
+    const scoreRes = computeSellScore({
+      hasTitle: true,
+      hasDescription: true,
+      photos: photos.length,
+      hasCondition: true,
+      priceInRange: true,
+    });
+
+    const payload: any = {
+      id: "",
+      photo: photos[0],
+      photos,
+      name: entry.name,
+      brand: entry.brand,
+      model: entry.model || null,
+      category: entry.category,
+      condition: entry.condition,
+      confidence: entry.confidence,
+      missing_info: entry.missing_info || [],
+      photo_coach: entry.photo_coach || [],
+      market_low: entry.market_low,
+      market_high: entry.market_high,
+      strategies,
+      selected_strategy: "smart",
+      listing: {
+        title: `${entry.brand} ${entry.name} — ${entry.condition}`,
+        description: entry.description,
+        category: entry.category,
+        keywords: entry.keywords || [],
+        condition: entry.condition,
+        price: smart,
+      },
+      sell_score: scoreRes.total,
+      sell_score_breakdown: scoreRes.breakdown,
+      sell_plan: sellPlan,
+      status: "draft",
+      created_at: new Date().toISOString(),
+    };
+
+    return await api.create(payload);
+  };
+
+  // Detect whether a photo is a real base64 data-URI (needed for real AI)
+  const hasBase64Photo = (arr: string[]) => arr.some(p => p.startsWith("data:image/"));
+
   const startAnalysis = async () => {
-    Haptics.impactAsync(Haptics.ImpactFeedbackStyle.Heavy);
+    try { Haptics.impactAsync(Haptics.ImpactFeedbackStyle.Heavy); } catch {}
     setPhase("analyzing");
     setError(null);
+    setStepIdx(0);
+    setProgress(0);
+    createdIdRef.current = null;
+    setPreviewItem(null);
 
-    const steps = [
-      "Analyse de l'image...",
-      "Identification du produit...",
-      "Estimation de l'état...",
-      "Recherche du marché...",
-      "Génération de l'annonce...",
-      "Calcul du Sell Score...",
-    ];
-    for (let i = 0; i < steps.length; i++) {
-      setStep(steps[i]);
-      setProgress((i + 1) / steps.length);
-      await new Promise(r => setTimeout(r, 550));
-    }
+    // Live progress: cycle through steps while the real call is in flight
+    let cancelled = false;
+    const totalSteps = PROGRESS_STEPS.length;
+    let currentStep = 0;
+    const stepTick = setInterval(() => {
+      if (cancelled) return;
+      currentStep = Math.min(currentStep + 1, totalSteps - 1);
+      setStepIdx(currentStep);
+      setProgress((currentStep + 1) / totalSteps * 0.85); // reserve 15% for save
+    }, 900);
+
+    const sampleMode = !hasBase64Photo(photos);
 
     try {
-      // Real vision AI first, silent fallback to mock catalog if it fails
-      let entry: any;
-      try {
-        entry = await api.analyze(photos);
-      } catch (aiErr) {
-        console.warn("Vision AI unavailable, using catalog fallback:", aiErr);
+      let entry: AnalyzedItem | any;
+
+      if (sampleMode) {
+        // Demo image path: use catalog directly. Give a bit of "analyzing" time.
+        await new Promise(r => setTimeout(r, 2600));
         entry = pickRandom(CATALOG);
+      } else {
+        // REAL AI. No silent fallback: any failure surfaces to the user.
+        entry = await api.analyze(photos);
       }
-      const strategies = computePriceStrategies(entry.market_low, entry.market_high);
-      const smart = strategies.find(s => s.key === "smart")!.price;
-      const sellPlan = computeSellPlan("balanced", smart, entry.market_low);
-      const scoreRes = computeSellScore({
-        hasTitle: true,
-        hasDescription: true,
-        photos: photos.length,
-        hasCondition: true,
-        priceInRange: true,
-      });
 
-      const created = await api.create({
-        id: "", // let backend override via default_factory when omitted? our model has default so send empty string
-        photo: photos[0],
-        photos,
-        name: entry.name,
-        brand: entry.brand,
-        model: entry.model,
-        category: entry.category,
-        condition: entry.condition,
-        confidence: entry.confidence,
-        missing_info: entry.missing_info,
-        photo_coach: entry.photo_coach,
-        market_low: entry.market_low,
-        market_high: entry.market_high,
-        strategies,
-        selected_strategy: "smart",
-        listing: {
-          title: `${entry.brand} ${entry.name} — ${entry.condition}`,
-          description: entry.description,
-          category: entry.category,
-          keywords: entry.keywords,
-          condition: entry.condition,
-          price: smart,
-        },
-        sell_score: scoreRes.total,
-        sell_score_breakdown: scoreRes.breakdown,
-        sell_plan: sellPlan,
-        status: "draft",
-        created_at: new Date().toISOString(),
-      } as any);
+      cancelled = true; clearInterval(stepTick);
+      setStepIdx(totalSteps - 1);
+      setProgress(0.95);
 
+      const created = await buildAndCreateItem(entry, sampleMode);
       createdIdRef.current = created.id;
-      Haptics.notificationAsync(Haptics.NotificationFeedbackType.Success);
+      setPreviewItem(created);
+      setProgress(1);
+      try { Haptics.notificationAsync(Haptics.NotificationFeedbackType.Success); } catch {}
       setPhase("results");
     } catch (e: any) {
-      console.error(e);
-      setError("Impossible de sauvegarder l'analyse.");
-      setPhase("preview");
+      cancelled = true; clearInterval(stepTick);
+      console.warn("Analyse échouée:", e);
+      try { Haptics.notificationAsync(Haptics.NotificationFeedbackType.Error); } catch {}
+      const msg = String(e?.message || "");
+      if (msg.includes("400")) {
+        setErrorTitle("Photo invalide");
+        setError("Les photos n'ont pas pu être lues. Essayez avec des images plus nettes (JPEG ou PNG).");
+      } else if (msg.includes("502") || msg.includes("Vision")) {
+        setErrorTitle("Objet non reconnu");
+        setError("Vendo n'a pas réussi à identifier cet objet. Prenez des photos plus proches et bien éclairées, puis réessayez.");
+      } else {
+        setErrorTitle("Analyse impossible");
+        setError("Une erreur est survenue pendant l'analyse. Vérifiez votre connexion et réessayez.");
+      }
+      setPhase("error");
     }
   };
 
   const openResult = () => {
     if (createdIdRef.current) {
-      router.replace(`/item/${createdIdRef.current}`);
-      // Reset state after navigation
+      const id = createdIdRef.current;
+      router.push(`/item/${id}`);
       setTimeout(() => {
         setPhotos([]);
         setPhase("idle");
         setProgress(0);
-      }, 300);
+        setPreviewItem(null);
+      }, 400);
     }
   };
 
@@ -190,14 +239,16 @@ export default function ScanScreen() {
     setPhase("idle");
     setProgress(0);
     setError(null);
+    setPreviewItem(null);
   };
 
   return (
     <SafeAreaView style={styles.safe} edges={["top"]}>
       {/* Header */}
       <View style={styles.header}>
-        <Pressable
+        <PressableScale
           testID="scan-close"
+          hapticStyle="selection"
           onPress={() => {
             if (phase !== "idle") reset();
             else router.push("/(tabs)");
@@ -205,25 +256,30 @@ export default function ScanScreen() {
           style={styles.iconBtn}
         >
           <Ionicons name={phase === "idle" ? "close" : "arrow-back"} size={22} color={theme.color.text} />
-        </Pressable>
+        </PressableScale>
         <Text style={styles.headerTitle}>
-          {phase === "idle" ? "Scanner" : phase === "preview" ? "Aperçu" : phase === "analyzing" ? "Analyse" : "Résultat"}
+          {phase === "idle" ? "Scanner"
+            : phase === "preview" ? "Aperçu"
+            : phase === "analyzing" ? "Analyse"
+            : phase === "error" ? "Erreur"
+            : "Résultat"}
         </Text>
         <View style={{ width: 40 }} />
       </View>
 
       {phase === "idle" && (
         <ScrollView contentContainerStyle={{ padding: 24, paddingBottom: 140 }} showsVerticalScrollIndicator={false}>
-          <Text style={styles.h1}>Que voulez-vous vendre ?</Text>
-          <Text style={styles.subtle}>
-            Prenez 1 à 3 photos claires. Vendo identifie l'objet et prépare votre annonce en quelques secondes.
-          </Text>
+          <Animated.Text entering={FadeInDown.duration(360)} style={styles.h1}>Que voulez-vous vendre ?</Animated.Text>
+          <Animated.Text entering={FadeInDown.duration(360).delay(60)} style={styles.subtle}>
+            Prenez 1 à 3 photos claires. Vendo identifie l{"\u2019"}objet et prépare votre annonce en quelques secondes.
+          </Animated.Text>
 
-          <Animated.View style={pulseStyle}>
-            <Pressable
+          <Animated.View entering={FadeInDown.duration(420).delay(120)} style={pulseStyle}>
+            <PressableScale
               testID="scan-camera-btn"
+              hapticStyle="heavy"
               onPress={pickFromCamera}
-              style={({ pressed }) => [styles.bigCta, pressed && { opacity: 0.9 }]}
+              style={styles.bigCta}
             >
               <LinearGradient
                 colors={[theme.color.lime, theme.color.limeDark]}
@@ -232,38 +288,47 @@ export default function ScanScreen() {
               <Ionicons name="camera" size={38} color={theme.color.onLime} />
               <Text style={styles.bigCtaTitle}>Prendre une photo</Text>
               <Text style={styles.bigCtaSub}>Ouverture de la caméra</Text>
-            </Pressable>
+            </PressableScale>
           </Animated.View>
 
-          <Pressable testID="scan-library-btn" onPress={pickFromLibrary} style={styles.altCta}>
-            <Ionicons name="images" size={22} color={theme.color.text} />
-            <Text style={styles.altCtaTxt}>Depuis la galerie</Text>
-          </Pressable>
+          <Animated.View entering={FadeInDown.duration(360).delay(180)}>
+            <PressableScale testID="scan-library-btn" hapticStyle="selection" onPress={pickFromLibrary} style={styles.altCta}>
+              <Ionicons name="images" size={22} color={theme.color.text} />
+              <Text style={styles.altCtaTxt}>Depuis la galerie</Text>
+            </PressableScale>
+          </Animated.View>
 
-          <Pressable testID="scan-sample-btn" onPress={useSampleImage} style={[styles.altCta, { marginTop: 10 }]}>
-            <Ionicons name="sparkles" size={22} color={theme.color.lime} />
-            <Text style={styles.altCtaTxt}>Essayer avec un objet d'exemple</Text>
-          </Pressable>
+          <Animated.View entering={FadeInDown.duration(360).delay(240)}>
+            <PressableScale testID="scan-sample-btn" hapticStyle="selection" onPress={useSampleImage} style={[styles.altCta, { marginTop: 10 }]}>
+              <Ionicons name="sparkles" size={22} color={theme.color.lime} />
+              <Text style={styles.altCtaTxt}>Essayer avec un objet d{"\u2019"}exemple</Text>
+            </PressableScale>
+          </Animated.View>
 
           {error && <Text style={styles.error}>{error}</Text>}
 
-          <View style={styles.tips}>
-            <Text style={styles.tipsTitle}>Astuces</Text>
+          <Animated.View entering={FadeIn.duration(500).delay(300)} style={styles.tips}>
+            <Text style={styles.tipsTitle}>Astuces pour un meilleur résultat</Text>
             <TipRow icon="sunny-outline" txt="Bonne lumière naturelle" />
             <TipRow icon="crop-outline" txt="Cadrez l'objet entier" />
             <TipRow icon="eye-outline" txt="Montrez les défauts éventuels" />
-          </View>
+          </Animated.View>
         </ScrollView>
       )}
 
       {phase === "preview" && (
         <ScrollView contentContainerStyle={{ padding: 24, paddingBottom: 160 }}>
-          <View style={styles.previewGrid} testID="preview-grid">
+          <Animated.View entering={FadeIn.duration(320)} style={styles.previewGrid} testID="preview-grid">
             {photos.map((p, i) => (
-              <View key={i} style={styles.previewCell}>
-                <Image source={{ uri: p }} style={styles.previewImg} contentFit="cover" />
-                <Pressable
+              <Animated.View
+                key={p + i}
+                entering={FadeInDown.duration(280).delay(i * 50)}
+                style={styles.previewCell}
+              >
+                <Image source={{ uri: p }} style={styles.previewImg} contentFit="cover" transition={220} />
+                <PressableScale
                   testID={`remove-photo-${i}`}
+                  hapticStyle="light"
                   onPress={() => {
                     setPhotos(prev => prev.filter((_, idx) => idx !== i));
                     if (photos.length === 1) reset();
@@ -271,37 +336,43 @@ export default function ScanScreen() {
                   style={styles.removeBtn}
                 >
                   <Ionicons name="close" size={16} color={theme.color.text} />
-                </Pressable>
-              </View>
+                </PressableScale>
+              </Animated.View>
             ))}
             {photos.length < 3 && (
-              <Pressable testID="add-more-photo" onPress={pickFromLibrary} style={[styles.previewCell, styles.addCell]}>
+              <PressableScale
+                testID="add-more-photo"
+                hapticStyle="selection"
+                onPress={pickFromLibrary}
+                style={[styles.previewCell, styles.addCell]}
+              >
                 <Ionicons name="add" size={32} color={theme.color.textMuted} />
                 <Text style={styles.addTxt}>Ajouter</Text>
-              </Pressable>
+              </PressableScale>
             )}
-          </View>
+          </Animated.View>
 
-          <View style={{ marginTop: 24 }}>
+          <Animated.View entering={FadeInDown.duration(360).delay(80)} style={{ marginTop: 24 }}>
             <Text style={styles.h2}>Prêt à analyser ?</Text>
-            <Text style={styles.subtle}>Vendo va identifier l'objet et générer une annonce complète.</Text>
-          </View>
+            <Text style={styles.subtle}>Vendo va identifier l{"\u2019"}objet et générer une annonce complète.</Text>
+          </Animated.View>
 
-          <Pressable
+          <PressableScale
             testID="analyze-btn"
+            hapticStyle="heavy"
             onPress={startAnalysis}
-            style={({ pressed }) => [styles.primaryBtn, pressed && { opacity: 0.9 }]}
+            style={styles.primaryBtn}
           >
-            <Text style={styles.primaryBtnTxt}>Analyser avec l'IA</Text>
+            <Text style={styles.primaryBtnTxt}>Analyser avec l{"\u2019"}IA</Text>
             <Ionicons name="sparkles" size={18} color={theme.color.onLime} />
-          </Pressable>
+          </PressableScale>
         </ScrollView>
       )}
 
       {phase === "analyzing" && (
         <View style={styles.analyzeWrap}>
-          <View style={styles.analyzeCard} testID="analyzing-view">
-            <Image source={{ uri: photos[0] }} style={styles.analyzeImg} contentFit="cover" />
+          <Animated.View entering={FadeIn.duration(400)} style={styles.analyzeCard} testID="analyzing-view">
+            <Image source={{ uri: photos[0] }} style={styles.analyzeImg} contentFit="cover" transition={280} />
             <View style={styles.scrimTop} />
             <Animated.View style={[styles.scanline, scanStyle]}>
               <LinearGradient
@@ -314,33 +385,123 @@ export default function ScanScreen() {
             <View style={styles.corner2} />
             <View style={styles.corner3} />
             <View style={styles.corner4} />
-          </View>
+          </Animated.View>
           <View style={styles.analyzeInfo}>
-            <ActivityIndicator color={theme.color.lime} />
-            <Text style={styles.analyzeStep}>{step}</Text>
+            <Animated.Text
+              key={`step-${stepIdx}`}
+              entering={FadeInDown.duration(260)}
+              exiting={FadeOut.duration(160)}
+              style={styles.analyzeStep}
+              testID="analyze-step-text"
+            >
+              {PROGRESS_STEPS[stepIdx]}
+            </Animated.Text>
             <View style={styles.progressTrack}>
-              <View style={[styles.progressFill, { width: `${progress * 100}%` }]} />
+              <Animated.View
+                style={[styles.progressFill, { width: `${progress * 100}%` }]}
+              />
+              <View style={[styles.progressGlow, { left: `${progress * 100}%` }]} />
             </View>
             <Text style={styles.analyzePct}>{Math.round(progress * 100)}%</Text>
           </View>
         </View>
       )}
 
-      {phase === "results" && (
-        <View style={styles.resultsWrap} testID="results-view">
-          <View style={styles.successIcon}>
-            <Ionicons name="checkmark" size={36} color={theme.color.onLime} />
+      {phase === "error" && (
+        <Animated.View entering={FadeIn.duration(320)} style={styles.errorWrap} testID="error-view">
+          <View style={styles.errorIcon}>
+            <Ionicons name="alert-circle" size={40} color={theme.color.error} />
           </View>
-          <Text style={styles.h1}>Analyse terminée</Text>
-          <Text style={styles.subtle}>Votre annonce est prête. Consultez le détail et personnalisez tout ce que vous voulez.</Text>
-          <Pressable testID="open-result-btn" onPress={openResult} style={styles.primaryBtn}>
-            <Text style={styles.primaryBtnTxt}>Voir le résultat</Text>
-            <Ionicons name="arrow-forward" size={18} color={theme.color.onLime} />
-          </Pressable>
-          <Pressable onPress={reset} style={styles.altCta}>
-            <Text style={styles.altCtaTxt}>Scanner un autre objet</Text>
-          </Pressable>
-        </View>
+          <Text style={styles.h1}>{errorTitle}</Text>
+          <Text style={[styles.subtle, { textAlign: "center" }]}>{error}</Text>
+          <PressableScale
+            testID="retry-btn"
+            hapticStyle="medium"
+            onPress={() => { setPhase("preview"); setError(null); }}
+            style={styles.primaryBtn}
+          >
+            <Ionicons name="refresh" size={18} color={theme.color.onLime} />
+            <Text style={styles.primaryBtnTxt}>Réessayer</Text>
+          </PressableScale>
+          <PressableScale
+            testID="error-back-btn"
+            hapticStyle="selection"
+            onPress={reset}
+            style={[styles.altCta, { marginTop: 12 }]}
+          >
+            <Text style={styles.altCtaTxt}>Reprendre depuis le début</Text>
+          </PressableScale>
+        </Animated.View>
+      )}
+
+      {phase === "results" && previewItem && (
+        <ScrollView contentContainerStyle={{ paddingBottom: 60 }} showsVerticalScrollIndicator={false}>
+          <Animated.View entering={FadeIn.duration(360)} style={styles.resultHero} testID="results-view">
+            <Image source={{ uri: previewItem.photo }} style={styles.resultImg} contentFit="cover" transition={360} />
+            <LinearGradient
+              colors={["transparent", "rgba(10,10,10,0.9)", theme.color.bg]}
+              locations={[0, 0.55, 1]}
+              style={StyleSheet.absoluteFillObject as any}
+            />
+            <Animated.View entering={FadeIn.duration(320).delay(200)} style={styles.confidenceBadge}>
+              <Ionicons name="sparkles" size={12} color={theme.color.lime} />
+              <Text style={styles.confidenceTxt}>IA · {previewItem.confidence}%</Text>
+            </Animated.View>
+          </Animated.View>
+
+          <View style={styles.resultBody}>
+            <Animated.Text entering={FadeInDown.duration(360).delay(140)} style={styles.resultBrand}>
+              {previewItem.brand?.toUpperCase()}
+            </Animated.Text>
+            <Animated.Text entering={FadeInDown.duration(360).delay(200)} style={styles.resultName} numberOfLines={2}>
+              {previewItem.name}
+            </Animated.Text>
+
+            <Animated.View entering={FadeInDown.duration(360).delay(260)} style={styles.resultMetaRow}>
+              <View style={[styles.pill, { borderColor: conditionColor(previewItem.condition) }]}>
+                <View style={[styles.dot, { backgroundColor: conditionColor(previewItem.condition) }]} />
+                <Text style={styles.pillTxt}>{previewItem.condition}</Text>
+              </View>
+              <View style={styles.pillGhost}>
+                <Ionicons name="pricetag-outline" size={12} color={theme.color.textMuted} />
+                <Text style={styles.pillGhostTxt}>{previewItem.category}</Text>
+              </View>
+            </Animated.View>
+
+            <Animated.View entering={FadeInDown.duration(400).delay(340)} style={styles.resultCard}>
+              <View style={{ alignItems: "center" }}>
+                <SellScoreRing score={previewItem.sell_score} size={110} delay={500} />
+              </View>
+              <View style={styles.resultPriceBlock}>
+                <Text style={styles.resultPriceLabel}>Prix recommandé</Text>
+                <Text style={styles.resultPriceValue}>{formatEUR(previewItem.listing.price)}</Text>
+                <Text style={styles.resultRange}>
+                  Marché : {formatEUR(previewItem.market_low)} – {formatEUR(previewItem.market_high)}
+                </Text>
+              </View>
+            </Animated.View>
+
+            <Animated.View entering={FadeInDown.duration(360).delay(420)}>
+              <PressableScale
+                testID="open-result-btn"
+                hapticStyle="medium"
+                onPress={openResult}
+                style={styles.primaryBtn}
+              >
+                <Text style={styles.primaryBtnTxt}>Voir le détail complet</Text>
+                <Ionicons name="arrow-forward" size={18} color={theme.color.onLime} />
+              </PressableScale>
+              <PressableScale
+                testID="scan-again-btn"
+                hapticStyle="selection"
+                onPress={reset}
+                style={[styles.altCta, { marginTop: 12 }]}
+              >
+                <Text style={styles.altCtaTxt}>Scanner un autre objet</Text>
+              </PressableScale>
+            </Animated.View>
+          </View>
+        </ScrollView>
       )}
     </SafeAreaView>
   );
@@ -367,33 +528,33 @@ const styles = StyleSheet.create({
     alignItems: "center", justifyContent: "center",
     borderWidth: 1, borderColor: theme.color.border,
   },
-  headerTitle: { color: theme.color.text, fontSize: 17, fontWeight: "600" },
-  h1: { color: theme.color.text, fontSize: 32, fontWeight: "700", letterSpacing: -1, marginBottom: 8 },
-  h2: { color: theme.color.text, fontSize: 22, fontWeight: "700", letterSpacing: -0.5, marginBottom: 6 },
-  subtle: { color: theme.color.textMuted, fontSize: 14, lineHeight: 20, marginBottom: 24 },
+  headerTitle: { color: theme.color.text, fontSize: 17, fontFamily: theme.font.textSemi },
+  h1: { color: theme.color.text, fontSize: 32, fontFamily: theme.font.displayBold, letterSpacing: -1, marginBottom: 8 },
+  h2: { color: theme.color.text, fontSize: 22, fontFamily: theme.font.displayBold, letterSpacing: -0.5, marginBottom: 6 },
+  subtle: { color: theme.color.textMuted, fontSize: 14, lineHeight: 20, marginBottom: 24, fontFamily: theme.font.text },
   bigCta: {
     height: 200, borderRadius: 28, overflow: "hidden",
     alignItems: "center", justifyContent: "center", gap: 8,
     marginBottom: 12,
   },
-  bigCtaTitle: { color: theme.color.onLime, fontSize: 22, fontWeight: "700", letterSpacing: -0.5, marginTop: 8 },
-  bigCtaSub: { color: "rgba(10,10,10,0.7)", fontSize: 13 },
+  bigCtaTitle: { color: theme.color.onLime, fontSize: 22, fontFamily: theme.font.displayBold, letterSpacing: -0.5, marginTop: 8 },
+  bigCtaSub: { color: "rgba(10,10,10,0.7)", fontSize: 13, fontFamily: theme.font.text },
   altCta: {
     height: 60, borderRadius: 18,
     backgroundColor: theme.color.surface,
     borderWidth: 1, borderColor: theme.color.border,
     flexDirection: "row", alignItems: "center", justifyContent: "center", gap: 10,
   },
-  altCtaTxt: { color: theme.color.text, fontSize: 15, fontWeight: "600" },
-  error: { color: theme.color.error, fontSize: 13, marginTop: 12, textAlign: "center" },
+  altCtaTxt: { color: theme.color.text, fontSize: 15, fontFamily: theme.font.textSemi },
+  error: { color: theme.color.error, fontSize: 13, marginTop: 12, textAlign: "center", fontFamily: theme.font.text },
   tips: {
     marginTop: 32, padding: 20, borderRadius: 20,
     backgroundColor: theme.color.surface,
     borderWidth: 1, borderColor: theme.color.border,
   },
-  tipsTitle: { color: theme.color.text, fontSize: 15, fontWeight: "700", marginBottom: 12 },
+  tipsTitle: { color: theme.color.text, fontSize: 15, fontFamily: theme.font.textBold, marginBottom: 12 },
   tipRow: { flexDirection: "row", alignItems: "center", gap: 10, paddingVertical: 6 },
-  tipTxt: { color: theme.color.textMuted, fontSize: 13 },
+  tipTxt: { color: theme.color.textMuted, fontSize: 13, fontFamily: theme.font.text },
   previewGrid: { flexDirection: "row", flexWrap: "wrap", gap: 10 },
   previewCell: {
     width: "48%", aspectRatio: 1, borderRadius: 20, overflow: "hidden",
@@ -403,20 +564,20 @@ const styles = StyleSheet.create({
   removeBtn: {
     position: "absolute", top: 8, right: 8,
     width: 28, height: 28, borderRadius: 14,
-    backgroundColor: "rgba(0,0,0,0.6)",
+    backgroundColor: "rgba(0,0,0,0.65)",
     alignItems: "center", justifyContent: "center",
   },
   addCell: {
     alignItems: "center", justifyContent: "center",
     borderWidth: 2, borderStyle: "dashed", borderColor: theme.color.border,
   },
-  addTxt: { color: theme.color.textMuted, fontSize: 12, marginTop: 6 },
+  addTxt: { color: theme.color.textMuted, fontSize: 12, marginTop: 6, fontFamily: theme.font.text },
   primaryBtn: {
-    marginTop: 24, height: 60, borderRadius: 18,
+    marginTop: 24, marginHorizontal: 0, height: 60, borderRadius: 18,
     backgroundColor: theme.color.lime,
     flexDirection: "row", alignItems: "center", justifyContent: "center", gap: 10,
   },
-  primaryBtnTxt: { color: theme.color.onLime, fontSize: 16, fontWeight: "700" },
+  primaryBtnTxt: { color: theme.color.onLime, fontSize: 16, fontFamily: theme.font.textBold },
   analyzeWrap: { flex: 1, padding: 24, alignItems: "center", justifyContent: "center" },
   analyzeCard: {
     width: 280, height: 280, borderRadius: 28, overflow: "hidden",
@@ -424,25 +585,89 @@ const styles = StyleSheet.create({
   },
   analyzeImg: { width: "100%", height: "100%" },
   scrimTop: { ...StyleSheet.absoluteFillObject, backgroundColor: "rgba(10,10,10,0.35)" },
-  scanline: {
-    position: "absolute", left: 0, right: 0, top: "50%", height: 30,
-  },
+  scanline: { position: "absolute", left: 0, right: 0, top: "50%", height: 30 },
   corner1: { position: "absolute", top: 12, left: 12, width: 24, height: 24, borderTopWidth: 3, borderLeftWidth: 3, borderColor: theme.color.lime, borderTopLeftRadius: 8 },
   corner2: { position: "absolute", top: 12, right: 12, width: 24, height: 24, borderTopWidth: 3, borderRightWidth: 3, borderColor: theme.color.lime, borderTopRightRadius: 8 },
   corner3: { position: "absolute", bottom: 12, left: 12, width: 24, height: 24, borderBottomWidth: 3, borderLeftWidth: 3, borderColor: theme.color.lime, borderBottomLeftRadius: 8 },
   corner4: { position: "absolute", bottom: 12, right: 12, width: 24, height: 24, borderBottomWidth: 3, borderRightWidth: 3, borderColor: theme.color.lime, borderBottomRightRadius: 8 },
-  analyzeInfo: { marginTop: 32, alignItems: "center", width: "100%", paddingHorizontal: 24 },
-  analyzeStep: { color: theme.color.text, fontSize: 16, fontWeight: "600", marginTop: 14 },
-  progressTrack: {
-    marginTop: 20, width: "100%", height: 4, borderRadius: 2,
-    backgroundColor: theme.color.surface, overflow: "hidden",
+  analyzeInfo: { marginTop: 32, alignItems: "center", width: "100%", paddingHorizontal: 24, minHeight: 100 },
+  analyzeStep: {
+    color: theme.color.text, fontSize: 16, fontFamily: theme.font.textSemi,
+    marginTop: 6, textAlign: "center", minHeight: 22,
   },
-  progressFill: { height: "100%", backgroundColor: theme.color.lime, borderRadius: 2 },
-  analyzePct: { color: theme.color.textMuted, fontSize: 12, marginTop: 8, letterSpacing: 1 },
-  resultsWrap: { flex: 1, padding: 24, alignItems: "center", justifyContent: "center" },
-  successIcon: {
+  progressTrack: {
+    marginTop: 24, width: "100%", height: 4, borderRadius: 2,
+    backgroundColor: theme.color.surface, overflow: "visible",
+    position: "relative",
+  },
+  progressFill: { height: 4, backgroundColor: theme.color.lime, borderRadius: 2 },
+  progressGlow: {
+    position: "absolute", top: -3, width: 10, height: 10, borderRadius: 5,
+    backgroundColor: theme.color.lime, shadowColor: theme.color.lime,
+    shadowOpacity: 0.8, shadowRadius: 6, shadowOffset: { width: 0, height: 0 },
+    marginLeft: -5,
+  },
+  analyzePct: {
+    color: theme.color.textMuted, fontSize: 12, marginTop: 8, letterSpacing: 1.2,
+    fontFamily: theme.font.displayMedium,
+  },
+  errorWrap: { flex: 1, padding: 24, alignItems: "center", justifyContent: "center" },
+  errorIcon: {
     width: 80, height: 80, borderRadius: 40,
-    backgroundColor: theme.color.lime,
-    alignItems: "center", justifyContent: "center", marginBottom: 28,
+    backgroundColor: "rgba(248,113,113,0.15)",
+    borderWidth: 1, borderColor: "rgba(248,113,113,0.35)",
+    alignItems: "center", justifyContent: "center", marginBottom: 24,
+  },
+  resultHero: {
+    height: 320, position: "relative",
+  },
+  resultImg: { width: "100%", height: "100%" },
+  confidenceBadge: {
+    position: "absolute", top: 16, right: 20,
+    flexDirection: "row", alignItems: "center", gap: 6,
+    paddingHorizontal: 12, height: 30, borderRadius: 999,
+    backgroundColor: "rgba(212,255,63,0.18)",
+    borderWidth: 1, borderColor: theme.color.lime,
+  },
+  confidenceTxt: { color: theme.color.lime, fontSize: 12, fontFamily: theme.font.textBold },
+  resultBody: { paddingHorizontal: 24, marginTop: -60 },
+  resultBrand: {
+    color: theme.color.textMuted, fontSize: 12, letterSpacing: 2,
+    fontFamily: theme.font.textBold,
+  },
+  resultName: {
+    color: theme.color.text, fontSize: 32,
+    fontFamily: theme.font.displayBold,
+    letterSpacing: -0.8, marginTop: 4,
+  },
+  resultMetaRow: { flexDirection: "row", flexWrap: "wrap", gap: 6, marginTop: 12 },
+  pill: { flexDirection: "row", alignItems: "center", gap: 6, borderWidth: 1, borderRadius: 999, paddingHorizontal: 10, height: 26 },
+  pillTxt: { color: theme.color.text, fontSize: 12, fontFamily: theme.font.textSemi },
+  pillGhost: {
+    flexDirection: "row", alignItems: "center", gap: 6,
+    paddingHorizontal: 10, height: 26, borderRadius: 999,
+    backgroundColor: theme.color.surface, borderWidth: 1, borderColor: theme.color.border,
+  },
+  pillGhostTxt: { color: theme.color.textMuted, fontSize: 12, fontFamily: theme.font.textSemi },
+  dot: { width: 6, height: 6, borderRadius: 3 },
+  resultCard: {
+    marginTop: 20, padding: 20, borderRadius: 24,
+    flexDirection: "row", gap: 20, alignItems: "center",
+    backgroundColor: theme.color.surface,
+    borderWidth: 1, borderColor: theme.color.border,
+  },
+  resultPriceBlock: { flex: 1 },
+  resultPriceLabel: {
+    color: theme.color.textMuted, fontSize: 11, letterSpacing: 1.2,
+    textTransform: "uppercase", fontFamily: theme.font.textBold,
+  },
+  resultPriceValue: {
+    color: theme.color.lime, fontSize: 32,
+    fontFamily: theme.font.displayBold,
+    letterSpacing: -1, marginTop: 4,
+  },
+  resultRange: {
+    color: theme.color.textMuted, fontSize: 12, marginTop: 8,
+    fontFamily: theme.font.text,
   },
 });

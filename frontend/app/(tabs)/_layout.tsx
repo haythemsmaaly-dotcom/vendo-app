@@ -1,7 +1,7 @@
 import React from "react";
 import { Tabs } from "expo-router";
 import { Ionicons } from "@expo/vector-icons";
-import { View, StyleSheet, Pressable, Text } from "react-native";
+import { View, StyleSheet, Pressable } from "react-native";
 import * as Haptics from "expo-haptics";
 import { theme } from "@/src/theme";
 
@@ -88,7 +88,7 @@ const styles = StyleSheet.create({
   },
   tabLabel: {
     fontSize: 11,
-    fontWeight: "600",
+    fontFamily: theme.font.textSemi,
     letterSpacing: 0.2,
   },
   iconWrap: {

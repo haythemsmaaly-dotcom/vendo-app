@@ -1,22 +1,32 @@
-import React, { useCallback, useEffect, useMemo, useState } from "react";
+import React, { useCallback, useEffect, useState } from "react";
 import {
-  View, Text, StyleSheet, ScrollView, Pressable, TextInput, ActivityIndicator, KeyboardAvoidingView, Platform,
+  View, Text, StyleSheet, TextInput, KeyboardAvoidingView, Platform, useWindowDimensions, ScrollView,
 } from "react-native";
 import { SafeAreaView } from "react-native-safe-area-context";
 import { Image } from "expo-image";
 import { LinearGradient } from "expo-linear-gradient";
 import { Ionicons } from "@expo/vector-icons";
 import { useLocalSearchParams, useRouter } from "expo-router";
+import Animated, {
+  useSharedValue, useAnimatedScrollHandler, useAnimatedStyle, interpolate, Extrapolation,
+  FadeIn, FadeInDown,
+} from "react-native-reanimated";
 import * as Haptics from "expo-haptics";
 
 import { theme, formatEUR, conditionColor, statusLabel } from "@/src/theme";
 import { api, Item } from "@/src/api";
 import SellScoreRing from "@/src/components/SellScoreRing";
+import Sparkline from "@/src/components/Sparkline";
+import PressableScale from "@/src/components/PressableScale";
+import Skeleton from "@/src/components/Skeleton";
 import { computeSellPlan, computeSellScore } from "@/src/catalog";
+
+const HERO_H = 380;
 
 export default function ItemDetail() {
   const { id } = useLocalSearchParams<{ id: string }>();
   const router = useRouter();
+  const { width: W } = useWindowDimensions();
   const [item, setItem] = useState<Item | null>(null);
   const [saving, setSaving] = useState(false);
   const [editMode, setEditMode] = useState(false);
@@ -24,6 +34,12 @@ export default function ItemDetail() {
   const [draftDesc, setDraftDesc] = useState("");
   const [draftPrice, setDraftPrice] = useState("");
   const [planMode, setPlanMode] = useState<"quick" | "balanced" | "best">("balanced");
+  const [activePhotoIdx, setActivePhotoIdx] = useState(0);
+
+  const scrollY = useSharedValue(0);
+  const onScroll = useAnimatedScrollHandler({
+    onScroll: (e) => { scrollY.value = e.contentOffset.y; },
+  });
 
   const load = useCallback(async () => {
     if (!id) return;
@@ -39,9 +55,22 @@ export default function ItemDetail() {
 
   useEffect(() => { load(); }, [load]);
 
+  const heroStyle = useAnimatedStyle(() => ({
+    transform: [
+      { translateY: interpolate(scrollY.value, [-200, 0, HERO_H], [-80, 0, HERO_H * 0.4], Extrapolation.CLAMP) },
+      { scale: interpolate(scrollY.value, [-200, 0], [1.35, 1], Extrapolation.CLAMP) },
+    ],
+  }));
+  const heroContentStyle = useAnimatedStyle(() => ({
+    opacity: interpolate(scrollY.value, [0, HERO_H * 0.5], [1, 0], Extrapolation.CLAMP),
+    transform: [{ translateY: interpolate(scrollY.value, [0, HERO_H * 0.5], [0, -20], Extrapolation.CLAMP) }],
+  }));
+
+  const currentPhoto = item?.photos?.[activePhotoIdx] || item?.photo || "";
+
   const setStrategy = async (key: string) => {
     if (!item) return;
-    Haptics.impactAsync(Haptics.ImpactFeedbackStyle.Medium);
+    try { Haptics.impactAsync(Haptics.ImpactFeedbackStyle.Medium); } catch {}
     const strat = item.strategies.find(s => s.key === key);
     if (!strat) return;
     const newPrice = strat.price;
@@ -57,7 +86,7 @@ export default function ItemDetail() {
 
   const pickPlan = async (mode: "quick" | "balanced" | "best") => {
     if (!item) return;
-    Haptics.selectionAsync();
+    try { Haptics.selectionAsync(); } catch {}
     setPlanMode(mode);
     const plan = computeSellPlan(mode, item.listing.price, item.market_low);
     try {
@@ -79,20 +108,17 @@ export default function ItemDetail() {
       priceInRange: price >= item.market_low && price <= item.market_high * 1.05,
     });
     try {
-      const saved = await api.update(item.id, {
-        listing: newListing,
-        sell_score: score.total,
-      });
+      const saved = await api.update(item.id, { listing: newListing, sell_score: score.total });
       setItem(saved);
       setEditMode(false);
-      Haptics.notificationAsync(Haptics.NotificationFeedbackType.Success);
+      try { Haptics.notificationAsync(Haptics.NotificationFeedbackType.Success); } catch {}
     } catch (e) { console.warn(e); }
     finally { setSaving(false); }
   };
 
   const markReady = async () => {
     if (!item) return;
-    Haptics.impactAsync(Haptics.ImpactFeedbackStyle.Heavy);
+    try { Haptics.impactAsync(Haptics.ImpactFeedbackStyle.Heavy); } catch {}
     try {
       const saved = await api.update(item.id, { status: item.status === "ready" ? "draft" : "ready" });
       setItem(saved);
@@ -101,6 +127,7 @@ export default function ItemDetail() {
 
   const removeItem = async () => {
     if (!item) return;
+    try { Haptics.notificationAsync(Haptics.NotificationFeedbackType.Warning); } catch {}
     try {
       await api.remove(item.id);
       router.replace("/(tabs)/items");
@@ -109,39 +136,59 @@ export default function ItemDetail() {
 
   if (!item) {
     return (
-      <SafeAreaView style={styles.safe}>
-        <ActivityIndicator color={theme.color.lime} style={{ marginTop: 80 }} />
+      <SafeAreaView style={styles.safe} edges={["top"]}>
+        <View style={{ paddingHorizontal: 24, paddingTop: 24, gap: 14 }}>
+          <Skeleton height={HERO_H - 60} radius={0} />
+          <Skeleton width={"70%"} height={28} radius={8} />
+          <Skeleton width={"90%"} height={16} radius={6} />
+          <Skeleton height={120} radius={20} />
+          <Skeleton height={160} radius={20} />
+        </View>
       </SafeAreaView>
     );
   }
 
+  const CARD_W = W - 48;
+
+  // Generate a synthetic market sparkline for each strategy (visually satisfying)
+  const spark = (base: number, key: string) => {
+    const seed = key === "fast" ? [3,4,3,2,1,2,3,4] : key === "smart" ? [2,3,3,4,3,4,5,4] : [1,2,3,4,4,5,6,5];
+    return seed.map(v => base * (1 + v * 0.02));
+  };
+
   return (
     <KeyboardAvoidingView style={{ flex: 1, backgroundColor: theme.color.bg }} behavior={Platform.OS === "ios" ? "padding" : undefined}>
-      <ScrollView
-        style={styles.safe}
+      <Animated.ScrollView
+        onScroll={onScroll}
+        scrollEventThrottle={16}
         contentContainerStyle={{ paddingBottom: 120 }}
         showsVerticalScrollIndicator={false}
       >
-        {/* Hero */}
+        {/* Hero with parallax */}
         <View style={styles.heroWrap}>
-          <Image source={{ uri: item.photo }} style={styles.hero} contentFit="cover" />
+          <Animated.View style={[styles.heroImgWrap, heroStyle]}>
+            <Image source={{ uri: currentPhoto }} style={styles.hero} contentFit="cover" transition={280} />
+          </Animated.View>
           <LinearGradient
             colors={["transparent", "rgba(10,10,10,0.4)", theme.color.bg]}
             locations={[0, 0.6, 1]}
             style={StyleSheet.absoluteFillObject as any}
+            pointerEvents="none"
           />
           <SafeAreaView edges={["top"]} style={styles.heroTop}>
-            <Pressable testID="detail-back" onPress={() => router.back()} style={styles.iconBtn}>
+            <PressableScale testID="detail-back" hapticStyle="selection" onPress={() => router.back()} style={styles.iconBtn}>
               <Ionicons name="arrow-back" size={20} color={theme.color.text} />
-            </Pressable>
-            <View style={{ flexDirection: "row", gap: 8 }}>
-              <Pressable testID="detail-delete" onPress={removeItem} style={styles.iconBtn}>
-                <Ionicons name="trash-outline" size={18} color={theme.color.text} />
-              </Pressable>
+            </PressableScale>
+            <View style={styles.confidenceBadge}>
+              <Ionicons name="sparkles" size={12} color={theme.color.lime} />
+              <Text style={styles.confidenceTxt}>IA · {item.confidence}%</Text>
             </View>
+            <PressableScale testID="detail-delete" hapticStyle="medium" onPress={removeItem} style={styles.iconBtn}>
+              <Ionicons name="trash-outline" size={18} color={theme.color.text} />
+            </PressableScale>
           </SafeAreaView>
-          <View style={styles.heroBottom}>
-            {item.brand && <Text style={styles.brand}>{item.brand}</Text>}
+          <Animated.View style={[styles.heroBottom, heroContentStyle]}>
+            {item.brand && <Text style={styles.brand}>{item.brand.toUpperCase()}</Text>}
             <Text style={styles.title} numberOfLines={2}>{item.name}</Text>
             <View style={styles.metaRow}>
               <View style={[styles.pill, { borderColor: conditionColor(item.condition) }]}>
@@ -152,18 +199,31 @@ export default function ItemDetail() {
                 <Ionicons name="pricetag-outline" size={12} color={theme.color.textMuted} />
                 <Text style={styles.pillGhostTxt}>{item.category}</Text>
               </View>
-              <View style={styles.pillGhost}>
-                <Ionicons name="sparkles" size={12} color={theme.color.lime} />
-                <Text style={[styles.pillGhostTxt, { color: theme.color.lime }]}>{item.confidence}% IA</Text>
-              </View>
             </View>
-          </View>
+          </Animated.View>
         </View>
 
-        {/* Sell Score + summary */}
-        <View style={styles.section}>
+        {/* Thumbnails row if multiple photos */}
+        {item.photos.length > 1 && (
+          <Animated.View entering={FadeIn.duration(320)} style={styles.thumbsRow}>
+            {item.photos.map((p, i) => (
+              <PressableScale
+                key={p + i}
+                testID={`thumb-${i}`}
+                hapticStyle="selection"
+                onPress={() => setActivePhotoIdx(i)}
+                style={[styles.thumb, activePhotoIdx === i && styles.thumbActive]}
+              >
+                <Image source={{ uri: p }} style={styles.thumbImg} contentFit="cover" transition={180} />
+              </PressableScale>
+            ))}
+          </Animated.View>
+        )}
+
+        {/* Sell Score card */}
+        <Animated.View entering={FadeInDown.duration(360)} style={styles.section}>
           <View style={styles.scoreCard}>
-            <SellScoreRing score={item.sell_score} size={110} />
+            <SellScoreRing score={item.sell_score} size={110} delay={200} duration={1100} />
             <View style={{ flex: 1, gap: 8 }}>
               <Text style={styles.scoreTitle}>Sell Score</Text>
               <Text style={styles.scoreDesc}>
@@ -177,86 +237,93 @@ export default function ItemDetail() {
               </View>
             </View>
           </View>
-        </View>
+        </Animated.View>
 
         {/* Sell Score breakdown */}
-        <View style={styles.section}>
+        <Animated.View entering={FadeInDown.duration(360).delay(80)} style={styles.section}>
           <Text style={styles.sectionTitle}>Ce qui compte</Text>
           <View style={styles.breakdownCard}>
-            {Object.entries(item.sell_score_breakdown || {}).map(([k, v]) => (
-              <View key={k} style={styles.breakdownRow}>
+            {Object.entries(item.sell_score_breakdown || {}).map(([k, v], i) => (
+              <Animated.View key={k} entering={FadeInDown.duration(280).delay(120 + i * 60)} style={styles.breakdownRow}>
                 <Text style={styles.breakdownLabel}>{k[0].toUpperCase() + k.slice(1)}</Text>
                 <View style={styles.breakdownBarWrap}>
                   <View style={[styles.breakdownBar, { width: `${(v / 25) * 100}%`, backgroundColor: v >= 20 ? theme.color.lime : v >= 10 ? theme.color.warning : theme.color.error }]} />
                 </View>
                 <Text style={styles.breakdownVal}>{v}</Text>
-              </View>
+              </Animated.View>
             ))}
           </View>
-        </View>
+        </Animated.View>
 
-        {/* Price strategies */}
-        <View style={styles.section}>
+        {/* Price strategies — horizontal snap carousel with sparklines */}
+        <Animated.View entering={FadeInDown.duration(360).delay(120)} style={styles.section}>
           <Text style={styles.sectionTitle}>Stratégie de prix</Text>
           <Text style={styles.sectionSub}>
             Marché : {formatEUR(item.market_low)} – {formatEUR(item.market_high)}
           </Text>
-          <View style={{ gap: 10, marginTop: 12 }}>
-            {item.strategies.map(s => {
+          <ScrollView
+            horizontal
+            showsHorizontalScrollIndicator={false}
+            snapToInterval={CARD_W + 12}
+            decelerationRate="fast"
+            contentContainerStyle={{ paddingHorizontal: 24, paddingVertical: 16, gap: 12 }}
+          >
+            {item.strategies.map((s, i) => {
               const active = item.selected_strategy === s.key;
+              const color = s.key === "fast" ? theme.color.warning : s.key === "max" ? theme.color.success : theme.color.lime;
               return (
-                <Pressable
+                <PressableScale
                   key={s.key}
                   testID={`strategy-${s.key}`}
+                  hapticStyle="medium"
                   onPress={() => setStrategy(s.key)}
-                  style={[styles.stratCard, active && styles.stratCardActive]}
+                  scaleTo={0.975}
+                  style={[styles.stratCard, { width: CARD_W }, active && styles.stratCardActive]}
                 >
-                  <View style={{ flex: 1, gap: 4 }}>
-                    <View style={{ flexDirection: "row", alignItems: "center", gap: 8 }}>
-                      <Text style={[styles.stratLabel, active && { color: theme.color.onLime }]}>{s.label}</Text>
-                      {active && (
-                        <View style={styles.checkMark}>
-                          <Ionicons name="checkmark" size={12} color={theme.color.lime} />
-                        </View>
-                      )}
-                    </View>
-                    <Text style={[styles.stratExpl, active && { color: "rgba(10,10,10,0.75)" }]}>
-                      {s.explanation}
-                    </Text>
+                  <View style={StyleSheet.absoluteFillObject} pointerEvents="none">
+                    <Sparkline data={spark(s.price, s.key)} width={CARD_W} height={168} color={active ? theme.color.onLime : color} fillOpacity={active ? 0.15 : 0.12} />
                   </View>
-                  <Text style={[styles.stratPrice, active && { color: theme.color.onLime }]}>
-                    {formatEUR(s.price)}
+                  <View style={styles.stratHeader}>
+                    <View style={[styles.stratTag, active && { borderColor: theme.color.onLime, backgroundColor: "rgba(10,10,10,0.15)" }]}>
+                      <Text style={[styles.stratTagTxt, active && { color: theme.color.onLime }]}>
+                        {s.key === "fast" ? "RAPIDE" : s.key === "smart" ? "OPTIMAL" : "PREMIUM"}
+                      </Text>
+                    </View>
+                    {active && (
+                      <View style={styles.checkMark}>
+                        <Ionicons name="checkmark" size={12} color={active ? theme.color.lime : theme.color.onLime} />
+                      </View>
+                    )}
+                  </View>
+                  <Text style={[styles.stratLabel, active && { color: theme.color.onLime }]}>{s.label}</Text>
+                  <Text style={[styles.stratPrice, active && { color: theme.color.onLime }]}>{formatEUR(s.price)}</Text>
+                  <Text style={[styles.stratExpl, active && { color: "rgba(10,10,10,0.72)" }]} numberOfLines={2}>
+                    {s.explanation}
                   </Text>
-                </Pressable>
+                </PressableScale>
               );
             })}
-          </View>
-        </View>
+          </ScrollView>
+        </Animated.View>
 
         {/* Listing generator */}
-        <View style={styles.section}>
+        <Animated.View entering={FadeInDown.duration(360).delay(160)} style={styles.section}>
           <View style={styles.rowBetween}>
             <Text style={styles.sectionTitle}>Annonce générée</Text>
-            <Pressable
+            <PressableScale
               testID="edit-listing-btn"
+              hapticStyle="medium"
               onPress={() => (editMode ? saveEdits() : setEditMode(true))}
               style={styles.smallBtn}
             >
-              {saving ? <ActivityIndicator size="small" color={theme.color.onLime} /> :
-                <Text style={styles.smallBtnTxt}>{editMode ? "Enregistrer" : "Modifier"}</Text>}
-            </Pressable>
+              <Text style={styles.smallBtnTxt}>{saving ? "…" : editMode ? "Enregistrer" : "Modifier"}</Text>
+            </PressableScale>
           </View>
 
           <View style={styles.listCard}>
             <FieldLabel>Titre</FieldLabel>
             {editMode ? (
-              <TextInput
-                value={draftTitle}
-                onChangeText={setDraftTitle}
-                style={styles.input}
-                placeholderTextColor={theme.color.textFaint}
-                testID="input-title"
-              />
+              <TextInput value={draftTitle} onChangeText={setDraftTitle} style={styles.input} placeholderTextColor={theme.color.textFaint} testID="input-title" />
             ) : (
               <Text style={styles.fieldValue}>{item.listing.title}</Text>
             )}
@@ -276,15 +343,9 @@ export default function ItemDetail() {
 
             <FieldLabel>Prix</FieldLabel>
             {editMode ? (
-              <TextInput
-                value={draftPrice}
-                onChangeText={setDraftPrice}
-                keyboardType="numeric"
-                style={styles.input}
-                testID="input-price"
-              />
+              <TextInput value={draftPrice} onChangeText={setDraftPrice} keyboardType="numeric" style={styles.input} testID="input-price" />
             ) : (
-              <Text style={[styles.fieldValue, { color: theme.color.lime, fontSize: 20, fontWeight: "700" }]}>
+              <Text style={[styles.fieldValue, { color: theme.color.lime, fontSize: 20, fontFamily: theme.font.displayBold }]}>
                 {formatEUR(item.listing.price)}
               </Text>
             )}
@@ -298,29 +359,29 @@ export default function ItemDetail() {
               ))}
             </View>
           </View>
-        </View>
+        </Animated.View>
 
         {/* Photo coach */}
         {item.photo_coach.length > 0 && (
-          <View style={styles.section}>
+          <Animated.View entering={FadeInDown.duration(360).delay(200)} style={styles.section}>
             <Text style={styles.sectionTitle}>Coach photos IA</Text>
             <Text style={styles.sectionSub}>Ajoutez ces clichés pour augmenter votre Sell Score.</Text>
             <View style={{ gap: 8, marginTop: 12 }}>
               {item.photo_coach.map((tip, i) => (
-                <View key={i} style={styles.coachRow}>
+                <Animated.View key={i} entering={FadeInDown.duration(280).delay(240 + i * 60)} style={styles.coachRow}>
                   <View style={styles.coachIcon}>
                     <Ionicons name="camera" size={14} color={theme.color.lime} />
                   </View>
                   <Text style={styles.coachTxt}>{tip}</Text>
-                </View>
+                </Animated.View>
               ))}
             </View>
-          </View>
+          </Animated.View>
         )}
 
         {/* Missing info */}
         {item.missing_info.length > 0 && (
-          <View style={styles.section}>
+          <Animated.View entering={FadeInDown.duration(360).delay(240)} style={styles.section}>
             <Text style={styles.sectionTitle}>Informations manquantes</Text>
             <View style={styles.missingCard}>
               {item.missing_info.map((m, i) => (
@@ -330,11 +391,11 @@ export default function ItemDetail() {
                 </View>
               ))}
             </View>
-          </View>
+          </Animated.View>
         )}
 
         {/* Sell plan */}
-        <View style={styles.section}>
+        <Animated.View entering={FadeInDown.duration(360).delay(280)} style={styles.section}>
           <Text style={styles.sectionTitle}>Plan de vente</Text>
           <Text style={styles.sectionSub}>Choisissez votre approche.</Text>
           <View style={styles.planPicker}>
@@ -342,14 +403,15 @@ export default function ItemDetail() {
               const active = planMode === m;
               const labels: any = { quick: "Rapide", balanced: "Équilibré", best: "Meilleur prix" };
               return (
-                <Pressable
+                <PressableScale
                   key={m}
                   testID={`plan-${m}`}
+                  hapticStyle="selection"
                   onPress={() => pickPlan(m)}
                   style={[styles.planTab, active && styles.planTabActive]}
                 >
                   <Text style={[styles.planTabTxt, active && { color: theme.color.onLime }]}>{labels[m]}</Text>
-                </Pressable>
+                </PressableScale>
               );
             })}
           </View>
@@ -359,23 +421,24 @@ export default function ItemDetail() {
             <PlanRow label="Prix minimum" value={formatEUR(item.sell_plan.minimum_price)} muted />
             <PlanRow label="Date cible" value={new Date(item.sell_plan.target_date).toLocaleDateString("fr-FR")} muted />
           </View>
-        </View>
+        </Animated.View>
 
         {/* Publish CTA */}
-        <View style={{ paddingHorizontal: 24, marginTop: 20 }}>
-          <Pressable
+        <Animated.View entering={FadeInDown.duration(360).delay(320)} style={{ paddingHorizontal: 24, marginTop: 20 }}>
+          <PressableScale
             testID="publish-btn"
+            hapticStyle="heavy"
             onPress={markReady}
-            style={({ pressed }) => [styles.publish, item.status === "ready" && { backgroundColor: theme.color.success }, pressed && { opacity: 0.9 }]}
+            style={[styles.publish, item.status === "ready" && { backgroundColor: theme.color.success }]}
           >
             <Ionicons name={item.status === "ready" ? "checkmark-circle" : "rocket"} size={20} color={theme.color.onLime} />
             <Text style={styles.publishTxt}>
               {item.status === "ready" ? "Prêt à publier · Marquer brouillon" : "Marquer comme prêt à publier"}
             </Text>
-          </Pressable>
+          </PressableScale>
           <Text style={styles.statusHint}>Statut actuel : {statusLabel(item.status)}</Text>
-        </View>
-      </ScrollView>
+        </Animated.View>
+      </Animated.ScrollView>
     </KeyboardAvoidingView>
   );
 }
@@ -394,11 +457,12 @@ function PlanRow({ label, value, muted }: { label: string; value: string; muted?
 
 const styles = StyleSheet.create({
   safe: { flex: 1, backgroundColor: theme.color.bg },
-  heroWrap: { height: 380, position: "relative" },
+  heroWrap: { height: HERO_H, position: "relative", overflow: "hidden" },
+  heroImgWrap: { position: "absolute", left: 0, right: 0, top: 0, height: HERO_H },
   hero: { width: "100%", height: "100%" },
   heroTop: {
     position: "absolute", top: 0, left: 0, right: 0,
-    flexDirection: "row", justifyContent: "space-between",
+    flexDirection: "row", justifyContent: "space-between", alignItems: "center",
     paddingHorizontal: 16, paddingTop: 8,
   },
   iconBtn: {
@@ -407,102 +471,137 @@ const styles = StyleSheet.create({
     borderWidth: 1, borderColor: theme.color.border,
     alignItems: "center", justifyContent: "center",
   },
+  confidenceBadge: {
+    flexDirection: "row", alignItems: "center", gap: 6,
+    paddingHorizontal: 12, height: 30, borderRadius: 999,
+    backgroundColor: "rgba(212,255,63,0.18)",
+    borderWidth: 1, borderColor: theme.color.lime,
+  },
+  confidenceTxt: { color: theme.color.lime, fontSize: 12, fontFamily: theme.font.textBold },
   heroBottom: { position: "absolute", bottom: 20, left: 24, right: 24, gap: 6 },
-  brand: { color: theme.color.textMuted, fontSize: 12, letterSpacing: 2, textTransform: "uppercase", fontWeight: "700" },
-  title: { color: theme.color.text, fontSize: 32, fontWeight: "700", letterSpacing: -1 },
+  brand: {
+    color: theme.color.textMuted, fontSize: 11, letterSpacing: 2,
+    fontFamily: theme.font.textBold,
+  },
+  title: {
+    color: theme.color.text, fontSize: 32,
+    fontFamily: theme.font.displayBold,
+    letterSpacing: -0.8,
+  },
   metaRow: { flexDirection: "row", flexWrap: "wrap", gap: 6, marginTop: 8 },
   pill: { flexDirection: "row", alignItems: "center", gap: 6, borderWidth: 1, borderRadius: 999, paddingHorizontal: 10, height: 26 },
-  pillTxt: { color: theme.color.text, fontSize: 12, fontWeight: "600" },
+  pillTxt: { color: theme.color.text, fontSize: 12, fontFamily: theme.font.textSemi },
   pillGhost: {
     flexDirection: "row", alignItems: "center", gap: 6,
     paddingHorizontal: 10, height: 26, borderRadius: 999,
     backgroundColor: "rgba(10,10,10,0.55)", borderWidth: 1, borderColor: theme.color.border,
   },
-  pillGhostTxt: { color: theme.color.textMuted, fontSize: 12, fontWeight: "600" },
+  pillGhostTxt: { color: theme.color.textMuted, fontSize: 12, fontFamily: theme.font.textSemi },
   dot: { width: 6, height: 6, borderRadius: 3 },
+  thumbsRow: {
+    flexDirection: "row", gap: 8, paddingHorizontal: 24, marginTop: -20, marginBottom: 4,
+  },
+  thumb: {
+    width: 56, height: 56, borderRadius: 12, overflow: "hidden",
+    borderWidth: 2, borderColor: "transparent",
+    backgroundColor: theme.color.surface,
+  },
+  thumbActive: { borderColor: theme.color.lime },
+  thumbImg: { width: "100%", height: "100%" },
   section: { paddingHorizontal: 24, marginTop: 24 },
-  sectionTitle: { color: theme.color.text, fontSize: 18, fontWeight: "700", letterSpacing: -0.4 },
-  sectionSub: { color: theme.color.textMuted, fontSize: 13, marginTop: 4 },
+  sectionTitle: { color: theme.color.text, fontSize: 18, fontFamily: theme.font.displayBold, letterSpacing: -0.4 },
+  sectionSub: { color: theme.color.textMuted, fontSize: 13, marginTop: 4, fontFamily: theme.font.text },
   scoreCard: {
     flexDirection: "row", gap: 18, padding: 18, borderRadius: 24,
     backgroundColor: theme.color.surface, borderWidth: 1, borderColor: theme.color.border,
     alignItems: "center",
   },
-  scoreTitle: { color: theme.color.text, fontSize: 16, fontWeight: "700" },
-  scoreDesc: { color: theme.color.textMuted, fontSize: 12, lineHeight: 17 },
+  scoreTitle: { color: theme.color.text, fontSize: 16, fontFamily: theme.font.textBold },
+  scoreDesc: { color: theme.color.textMuted, fontSize: 12, lineHeight: 17, fontFamily: theme.font.text },
   priceBig: {
     marginTop: 4, paddingTop: 10,
     borderTopWidth: StyleSheet.hairlineWidth, borderTopColor: theme.color.border,
   },
-  priceLabel: { color: theme.color.textMuted, fontSize: 11, letterSpacing: 0.6, textTransform: "uppercase", fontWeight: "600" },
-  priceValue: { color: theme.color.lime, fontSize: 22, fontWeight: "700", letterSpacing: -0.5, marginTop: 2 },
+  priceLabel: {
+    color: theme.color.textMuted, fontSize: 11, letterSpacing: 0.8,
+    textTransform: "uppercase", fontFamily: theme.font.textBold,
+  },
+  priceValue: {
+    color: theme.color.lime, fontSize: 22, fontFamily: theme.font.displayBold,
+    letterSpacing: -0.5, marginTop: 2,
+  },
   breakdownCard: {
     marginTop: 12, padding: 16, borderRadius: 20,
     backgroundColor: theme.color.surface, borderWidth: 1, borderColor: theme.color.border, gap: 12,
   },
   breakdownRow: { flexDirection: "row", alignItems: "center", gap: 12 },
-  breakdownLabel: { width: 90, color: theme.color.textMuted, fontSize: 12, fontWeight: "600" },
-  breakdownBarWrap: {
-    flex: 1, height: 6, borderRadius: 3, backgroundColor: theme.color.surface2, overflow: "hidden",
-  },
+  breakdownLabel: { width: 90, color: theme.color.textMuted, fontSize: 12, fontFamily: theme.font.textSemi },
+  breakdownBarWrap: { flex: 1, height: 6, borderRadius: 3, backgroundColor: theme.color.surface2, overflow: "hidden" },
   breakdownBar: { height: "100%", borderRadius: 3 },
-  breakdownVal: { color: theme.color.text, fontSize: 12, fontWeight: "700", width: 24, textAlign: "right" },
+  breakdownVal: { color: theme.color.text, fontSize: 12, fontFamily: theme.font.textBold, width: 24, textAlign: "right" },
   stratCard: {
-    padding: 16, borderRadius: 20, flexDirection: "row", alignItems: "center", gap: 12,
+    height: 168, borderRadius: 24, padding: 20, overflow: "hidden",
     backgroundColor: theme.color.surface, borderWidth: 1, borderColor: theme.color.border,
+    justifyContent: "space-between",
   },
   stratCardActive: { backgroundColor: theme.color.lime, borderColor: theme.color.lime },
-  stratLabel: { color: theme.color.text, fontSize: 15, fontWeight: "700" },
-  stratExpl: { color: theme.color.textMuted, fontSize: 12, lineHeight: 17 },
-  stratPrice: { color: theme.color.text, fontSize: 20, fontWeight: "700", letterSpacing: -0.4 },
-  checkMark: {
-    width: 18, height: 18, borderRadius: 9,
-    backgroundColor: theme.color.onLime,
+  stratHeader: { flexDirection: "row", justifyContent: "space-between", alignItems: "center" },
+  stratTag: {
+    alignSelf: "flex-start", paddingHorizontal: 10, height: 22, borderRadius: 999,
+    borderWidth: 1, borderColor: theme.color.border,
+    backgroundColor: "rgba(255,255,255,0.03)",
     alignItems: "center", justifyContent: "center",
+  },
+  stratTagTxt: { color: theme.color.textMuted, fontSize: 10, letterSpacing: 1.5, fontFamily: theme.font.textBold },
+  stratLabel: { color: theme.color.text, fontSize: 18, fontFamily: theme.font.textBold, marginTop: 4 },
+  stratPrice: { color: theme.color.text, fontSize: 32, fontFamily: theme.font.displayBold, letterSpacing: -0.8 },
+  stratExpl: { color: theme.color.textMuted, fontSize: 12, lineHeight: 17, fontFamily: theme.font.text },
+  checkMark: {
+    width: 24, height: 24, borderRadius: 12,
+    backgroundColor: theme.color.onLime, alignItems: "center", justifyContent: "center",
   },
   rowBetween: { flexDirection: "row", alignItems: "center", justifyContent: "space-between" },
   smallBtn: {
     paddingHorizontal: 14, height: 32, borderRadius: 16,
     backgroundColor: theme.color.lime, alignItems: "center", justifyContent: "center",
   },
-  smallBtnTxt: { color: theme.color.onLime, fontSize: 12, fontWeight: "700" },
+  smallBtnTxt: { color: theme.color.onLime, fontSize: 12, fontFamily: theme.font.textBold },
   listCard: {
     marginTop: 12, padding: 18, borderRadius: 20,
     backgroundColor: theme.color.surface, borderWidth: 1, borderColor: theme.color.border,
   },
   fieldLabel: {
-    color: theme.color.textMuted, fontSize: 11, letterSpacing: 1.2,
-    textTransform: "uppercase", fontWeight: "700", marginTop: 12, marginBottom: 6,
+    color: theme.color.textMuted, fontSize: 11, letterSpacing: 1.4,
+    textTransform: "uppercase", fontFamily: theme.font.textBold, marginTop: 12, marginBottom: 6,
   },
-  fieldValue: { color: theme.color.text, fontSize: 14, lineHeight: 20 },
+  fieldValue: { color: theme.color.text, fontSize: 14, lineHeight: 20, fontFamily: theme.font.text },
   input: {
     color: theme.color.text, fontSize: 14, lineHeight: 20,
     backgroundColor: theme.color.bg, borderRadius: 12, padding: 12,
     borderWidth: 1, borderColor: theme.color.border,
+    fontFamily: theme.font.text,
   },
   kwWrap: { flexDirection: "row", flexWrap: "wrap", gap: 6, marginTop: 4 },
   kw: {
     paddingHorizontal: 10, height: 26, borderRadius: 999,
-    backgroundColor: theme.color.surface2,
-    alignItems: "center", justifyContent: "center",
+    backgroundColor: theme.color.surface2, alignItems: "center", justifyContent: "center",
   },
-  kwTxt: { color: theme.color.textMuted, fontSize: 11, fontWeight: "600" },
+  kwTxt: { color: theme.color.textMuted, fontSize: 11, fontFamily: theme.font.textSemi },
   coachRow: {
     padding: 14, borderRadius: 16, flexDirection: "row", alignItems: "center", gap: 12,
     backgroundColor: theme.color.surface, borderWidth: 1, borderColor: theme.color.border,
   },
   coachIcon: {
     width: 30, height: 30, borderRadius: 8,
-    backgroundColor: theme.color.limeSoft,
-    alignItems: "center", justifyContent: "center",
+    backgroundColor: theme.color.limeSoft, alignItems: "center", justifyContent: "center",
   },
-  coachTxt: { flex: 1, color: theme.color.text, fontSize: 13 },
+  coachTxt: { flex: 1, color: theme.color.text, fontSize: 13, fontFamily: theme.font.text },
   missingCard: {
     marginTop: 12, padding: 14, borderRadius: 16,
     backgroundColor: theme.color.surface, borderWidth: 1, borderColor: theme.color.border, gap: 10,
   },
   missingRow: { flexDirection: "row", alignItems: "center", gap: 10 },
-  missingTxt: { color: theme.color.text, fontSize: 13 },
+  missingTxt: { color: theme.color.text, fontSize: 13, fontFamily: theme.font.text },
   planPicker: {
     flexDirection: "row", gap: 6, marginTop: 12,
     padding: 4, backgroundColor: theme.color.surface, borderRadius: 14,
@@ -510,19 +609,19 @@ const styles = StyleSheet.create({
   },
   planTab: { flex: 1, height: 40, borderRadius: 10, alignItems: "center", justifyContent: "center" },
   planTabActive: { backgroundColor: theme.color.lime },
-  planTabTxt: { color: theme.color.textMuted, fontSize: 13, fontWeight: "600" },
+  planTabTxt: { color: theme.color.textMuted, fontSize: 13, fontFamily: theme.font.textSemi },
   planCard: {
     marginTop: 12, padding: 18, borderRadius: 20,
     backgroundColor: theme.color.surface, borderWidth: 1, borderColor: theme.color.border, gap: 12,
   },
   planRow: { flexDirection: "row", justifyContent: "space-between", alignItems: "center" },
-  planLabel: { color: theme.color.textMuted, fontSize: 13 },
-  planValue: { color: theme.color.text, fontSize: 15, fontWeight: "700" },
+  planLabel: { color: theme.color.textMuted, fontSize: 13, fontFamily: theme.font.text },
+  planValue: { color: theme.color.text, fontSize: 15, fontFamily: theme.font.textBold },
   publish: {
     height: 60, borderRadius: 18, flexDirection: "row",
     alignItems: "center", justifyContent: "center", gap: 10,
     backgroundColor: theme.color.lime,
   },
-  publishTxt: { color: theme.color.onLime, fontSize: 15, fontWeight: "700" },
-  statusHint: { color: theme.color.textMuted, fontSize: 12, textAlign: "center", marginTop: 10 },
+  publishTxt: { color: theme.color.onLime, fontSize: 15, fontFamily: theme.font.textBold },
+  statusHint: { color: theme.color.textMuted, fontSize: 12, textAlign: "center", marginTop: 10, fontFamily: theme.font.text },
 });

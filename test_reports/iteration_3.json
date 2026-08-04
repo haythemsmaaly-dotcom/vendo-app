@@ -1,0 +1,44 @@
+{
+  "summary": "Iteration 3 — full regression + LIVE design verification. Backend: all 15 pytest tests pass (10 CRUD/stats + 5 /api/analyze including real Gemini 3 Flash vision on sneaker/watch/multi-image, empty-photos→400, and the invalid-base64→400 fix from iter2 now works). Frontend (mobile viewport 390x844): Home renders animated potential-amount (12 671 €), all Home testIDs present (home-header, potential-hero, potential-amount, scan-primary-cta, find-things-cta, 6 recent-cards, 2 attention-rows). Scan sample flow works end-to-end: scan-sample-btn → preview → analyze-btn → progress steps → results-view with hero photo + brand + name + confidence badge + animated Sell Score ring 85 + price 280 € + open-result-btn → navigates to /item/{id}. Item Detail: parallax hero, animated Sell Score ring, breakdown bars, all 3 strategies (fast/smart/max) tappable, all 3 sell plans (quick/balanced/best), edit-listing opens with input-title/input-desc/input-price, publish-btn, detail-back, detail-delete all present & functional. Items tab: 5 filter chips all resolve, 9 rows visible, draft filter narrows to 6 rows, row tap navigates to detail. Profile: stat-earned=450€, stat-sold=1, stat-avg=450€, stat-total=9, stat-potential=12 880€, pref-notifs & pref-price toggles present. NO console errors related to fonts or reanimated shared values. Custom fonts Space Grotesk / Inter visibly loaded (tight editorial numbers on Home + Profile). No red screen. No regression vs iteration 2.",
+  "backend_issues": {
+    "critical": [],
+    "minor": []
+  },
+  "frontend_issues": {
+    "ui_bugs": [],
+    "integration_issues": [],
+    "design_issues": [
+      {"screen": "global", "issues": [
+        "React Native Web still emits deprecation warnings: 'shadow*' style props (use boxShadow) — carried over from iter1/iter2, non-blocking.",
+        "New Reanimated warning appears twice on mount: '[Reanimated] Property [transform] may be overwritten by a layout animation. Please wrap your component with an animated view and apply the layout animation on the wrapper.' Likely caused by combining an entering= layout animation with a useAnimatedStyle transform on the same view (e.g. staggered breakdown bars or parallax hero). Non-blocking (animations still play) but should be fixed by moving the layout animation onto a wrapper Animated.View."
+      ]}
+    ],
+    "react_native_issues": []
+  },
+  "test_report_links": [
+    "/app/backend/tests/test_vendo_api.py",
+    "/app/backend/tests/test_analyze.py",
+    "/app/test_reports/pytest/pytest_iter3.xml"
+  ],
+  "action_items": [
+    "(Optional/cosmetic) Silence RN Web 'shadow*' deprecation by replacing shadow{Color,Offset,Opacity,Radius} with the single boxShadow style prop.",
+    "(Optional/cosmetic) Wrap components that use both `entering=` layout animation and `useAnimatedStyle` transform with an outer Animated.View — apply the entering animation on the wrapper and keep the transform on the inner view. This will remove the two Reanimated warnings on mount.",
+    "No functional fixes required. All 15 backend tests + full frontend flow green."
+  ],
+  "critical_code_review_comments": [
+    "server.py:270-284 — new strict base64 validation (validate=True + JPEG/PNG/WEBP magic-byte check) is clean and now correctly returns 400 for garbage payloads (test_analyze_invalid_base64_returns_400 passes).",
+    "scan.tsx:186-221 — silent catalog fallback removed as expected; error branch differentiates 400 ('Photo invalide') vs 502/'Vision' ('Objet non reconnu') vs generic. Error message text matches spec.",
+    "api.ts:9-15 — j() throws `HTTP {status}: ...` so scan.tsx's msg.includes('502') check is correct.",
+    "server.py stays at ~380 lines, well under the 700-line threshold. No DRY issues introduced this iteration."
+  ],
+  "updated_files": [],
+  "success_rate": {
+    "backend": "100% (15/15 pytest)",
+    "frontend": "100% (Home, Scan sample path, Item Detail, Items filters/rows, Profile stats/toggles all functional; no console errors)"
+  },
+  "seed_data_creation": "The sample-scan flow creates one draft catalog item in Mongo per run (expected). No dedicated seed data added by this iteration.",
+  "retest_needed": false,
+  "should_main_agent_self_test": true,
+  "context_for_next_testing_agent": "Reuse both /app/backend/tests/test_vendo_api.py and /app/backend/tests/test_analyze.py — full pass in ~33s. Frontend flow to re-run on any change: Home animated hero → Scan (scan-sample-btn) → analyze-btn → results-view → open-result-btn → Item detail (strategies + plans + edit + publish + back) → Items tab (Mes objets) filter chips + row tap → Profile stats. Real vision AI error path CANNOT be tested through the sample button (that path uses the local CATALOG and never calls /api/analyze); to trigger error-view/retry-btn in UI you'd need to upload a real base64 photo via a native build or mock the api.analyze function. Code path is correct (scan.tsx:213-220 → setPhase('error') → error-view rendered at line 411 with retry-btn at line 418).",
+  "rca_of_issue": "N/A — no bugs found this iteration. Iter2 invalid-base64→502 bug is fixed and covered by an automated test."
+}
