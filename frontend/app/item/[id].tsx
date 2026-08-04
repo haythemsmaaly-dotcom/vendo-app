@@ -259,7 +259,7 @@ export default function ItemDetail() {
         <Animated.View entering={FadeInDown.duration(360).delay(120)} style={styles.section}>
           <Text style={styles.sectionTitle}>Stratégie de prix</Text>
           <Text style={styles.sectionSub}>
-            Marché : {formatEUR(item.market_low)} – {formatEUR(item.market_high)}
+            Marché estimé par l{"\u2019"}IA : {formatEUR(item.market_low)} – {formatEUR(item.market_high)}
           </Text>
           <ScrollView
             horizontal
@@ -360,6 +360,22 @@ export default function ItemDetail() {
             </View>
           </View>
         </Animated.View>
+
+        {/* Condition reasons (from AI) */}
+        {item.condition_reasons && item.condition_reasons.length > 0 && (
+          <Animated.View entering={FadeInDown.duration(360).delay(180)} style={styles.section}>
+            <Text style={styles.sectionTitle}>Ce que Vendo voit</Text>
+            <Text style={styles.sectionSub}>Analyse visuelle de l{"\u2019"}état.</Text>
+            <View style={styles.conditionCard}>
+              {item.condition_reasons.map((r, i) => (
+                <View key={i} style={styles.conditionRow}>
+                  <View style={[styles.condDot2, { backgroundColor: conditionColor(item.condition) }]} />
+                  <Text style={styles.conditionTxt}>{r}</Text>
+                </View>
+              ))}
+            </View>
+          </Animated.View>
+        )}
 
         {/* Photo coach */}
         {item.photo_coach.length > 0 && (
@@ -602,6 +618,13 @@ const styles = StyleSheet.create({
   },
   missingRow: { flexDirection: "row", alignItems: "center", gap: 10 },
   missingTxt: { color: theme.color.text, fontSize: 13, fontFamily: theme.font.text },
+  conditionCard: {
+    marginTop: 12, padding: 16, borderRadius: 20,
+    backgroundColor: theme.color.surface, borderWidth: 1, borderColor: theme.color.border, gap: 10,
+  },
+  conditionRow: { flexDirection: "row", alignItems: "flex-start", gap: 10 },
+  condDot2: { width: 6, height: 6, borderRadius: 3, marginTop: 7 },
+  conditionTxt: { flex: 1, color: theme.color.text, fontSize: 13, lineHeight: 19, fontFamily: theme.font.text },
   planPicker: {
     flexDirection: "row", gap: 6, marginTop: 12,
     padding: 4, backgroundColor: theme.color.surface, borderRadius: 14,

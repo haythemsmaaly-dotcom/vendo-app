@@ -52,10 +52,14 @@ def _assert_analyzed_schema(d: dict):
     """Validate every field type & value from AnalyzedItem."""
     for k in ("name", "brand", "category", "condition", "confidence",
               "missing_info", "photo_coach", "market_low", "market_high",
-              "keywords", "description"):
+              "keywords", "description", "condition_reasons"):
         assert k in d, f"missing field: {k}"
     # model can be null but key must exist
     assert "model" in d
+    # condition_reasons: list of strings, may include empty on very-confident items
+    assert isinstance(d["condition_reasons"], list)
+    assert all(isinstance(x, str) for x in d["condition_reasons"])
+    assert len(d["condition_reasons"]) <= 4
     assert isinstance(d["name"], str) and d["name"]
     assert isinstance(d["brand"], str)
     assert isinstance(d["category"], str)

@@ -63,6 +63,7 @@ class Item(BaseModel):
     model: Optional[str] = None
     category: str
     condition: str  # Neuf | Très bon | Bon | Correct | Usé
+    condition_reasons: List[str] = []
     confidence: int = 80
     missing_info: List[str] = []
     photo_coach: List[str] = []
@@ -176,6 +177,7 @@ class AnalyzedItem(BaseModel):
     model: Optional[str] = None
     category: str
     condition: str
+    condition_reasons: List[str] = []
     confidence: int
     missing_info: List[str] = []
     photo_coach: List[str] = []
@@ -185,29 +187,39 @@ class AnalyzedItem(BaseModel):
     description: str
 
 
-VISION_SYSTEM_PROMPT = """Tu es Vendo, un expert en reconnaissance d'objets et estimation de prix pour la revente d'occasion (marché européen en euros).
+VISION_SYSTEM_PROMPT = """Tu es Vendo, expert en reconnaissance d'objets d'occasion et en estimation de leur état pour la revente (marché européen en euros).
 
-À partir d'une ou plusieurs photos d'un objet, tu identifies l'objet et retournes UNIQUEMENT un objet JSON valide (aucun texte autour, aucun bloc markdown).
+À partir d'une ou plusieurs photos d'un objet, tu identifies l'objet ET tu évalues rigoureusement son état visible.
 
-Le JSON doit contenir exactement ces champs :
+Tu retournes UNIQUEMENT un objet JSON valide (aucun texte autour, aucun bloc markdown).
+
+Champs OBLIGATOIRES :
 {
   "name": "Nom de l'objet (ex: Air Jordan 1 High, Casque Sony WH-1000XM5)",
   "brand": "Marque (ex: Nike, Sony, Apple)",
-  "model": "Référence exacte du modèle si identifiable, sinon null",
+  "model": "Référence exacte du modèle si visible/identifiable, sinon null",
   "category": "Une des catégories: Sneakers, Vêtements, Sacs, Montres, Audio, Téléphones, Tablettes, Ordinateurs, Consoles, Jeux vidéo, Livres, Décoration, Meubles, Bijoux, Instruments, Sport, Jouets, Autre",
-  "condition": "Neuf | Très bon | Bon | Correct | Usé  (basé sur ce que tu vois)",
+  "condition": "Neuf | Très bon | Bon | Correct | Usé",
+  "condition_reasons": ["Éléments VISIBLES qui justifient la note d'état, en français, max 4 phrases courtes. Ex: 'Rayures visibles sur la semelle', 'Boîte présente et intacte', 'Aucune usure apparente sur le cuir'. Ne mentionne QUE ce que tu vois réellement. Si tu ne vois pas de défaut, dis-le explicitement."],
   "confidence": 0-100,
-  "missing_info": ["Informations manquantes qui aideraient à mieux évaluer, en français, max 3"],
-  "photo_coach": ["Photos additionnelles à prendre pour améliorer l'annonce, en français, max 3"],
-  "market_low": nombre en EUR (borne basse réaliste du marché d'occasion actuel),
-  "market_high": nombre en EUR (borne haute réaliste),
+  "missing_info": ["Informations manquantes que l'utilisateur devrait vérifier, en français, max 3. Ex: 'Batterie état ?', 'Boîte d'origine ?'"],
+  "photo_coach": ["Photos additionnelles à prendre pour améliorer l'annonce, en français, max 3. Ex: 'Photo de l'étiquette de taille', 'Gros plan sur la semelle'"],
+  "market_low": nombre en EUR (borne basse plausible du marché d'occasion actuel — estimation IA, non basée sur données live),
+  "market_high": nombre en EUR (borne haute plausible — estimation IA),
   "keywords": ["5-8 mots-clés français pour l'annonce"],
-  "description": "Description d'annonce professionnelle en français, 2-4 phrases, mettant en valeur l'objet et son état"
+  "description": "Description d'annonce professionnelle en français, 2-4 phrases, mettant en valeur l'objet ET mentionnant honnêtement les défauts visibles"
 }
 
-Règles strictes:
-- Si tu ne reconnais pas l'objet, mets confidence bas (<50) mais renvoie quand même une estimation raisonnable.
-- market_low et market_high doivent être cohérents (low < high) et refléter le marché de l'occasion, pas le neuf.
+Règles strictes :
+- Ne PRÉTENDS PAS voir un défaut, un accessoire ou un détail qui n'est pas visible sur les photos.
+- Si l'angle ou la lumière ne permet pas d'évaluer, mets confidence bas et ajoute une entrée dans missing_info/photo_coach.
+- Grille de condition :
+  * Neuf : aucun défaut, emballage/étiquettes présents
+  * Très bon : quasi neuf, micro-marques d'usage à peine visibles
+  * Bon : usage visible normal, aucun défaut majeur
+  * Correct : défauts esthétiques visibles mais fonctionnel
+  * Usé : défauts importants ou usure marquée
+- market_low et market_high doivent être cohérents (low < high) et refléter le marché de l'occasion, pas le neuf. Ce sont des estimations IA, PAS des prix issus de données marché en direct.
 - Utilise TOUJOURS le français pour tous les textes.
 - Retourne UNIQUEMENT le JSON, sans commentaire, sans balise markdown."""
 
@@ -351,6 +363,7 @@ async def analyze_item(req: AnalyzeRequest):
             model=_s(data.get("model")) or None,
             category=_s(data.get("category"), "Autre"),
             condition=cond,
+            condition_reasons=_list(data.get("condition_reasons"))[:4],
             confidence=confidence,
             missing_info=_list(data.get("missing_info"))[:3],
             photo_coach=_list(data.get("photo_coach"))[:3],

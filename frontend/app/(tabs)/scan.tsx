@@ -24,7 +24,7 @@ type Phase = "idle" | "preview" | "analyzing" | "results" | "error";
 const PROGRESS_STEPS = [
   "Je regarde vos photos…",
   "J'identifie le produit…",
-  "Je consulte le marché…",
+  "J'évalue l'état visible…",
   "Je peaufine votre annonce…",
   "Je calcule votre Sell Score…",
 ];
@@ -130,6 +130,7 @@ export default function ScanScreen() {
       model: entry.model || null,
       category: entry.category,
       condition: entry.condition,
+      condition_reasons: entry.condition_reasons || [],
       confidence: entry.confidence,
       missing_info: entry.missing_info || [],
       photo_coach: entry.photo_coach || [],
@@ -274,21 +275,25 @@ export default function ScanScreen() {
             Prenez 1 à 3 photos claires. Vendo identifie l{"\u2019"}objet et prépare votre annonce en quelques secondes.
           </Animated.Text>
 
-          <Animated.View entering={FadeInDown.duration(420).delay(120)} style={pulseStyle}>
-            <PressableScale
-              testID="scan-camera-btn"
-              hapticStyle="heavy"
-              onPress={pickFromCamera}
-              style={styles.bigCta}
-            >
-              <LinearGradient
-                colors={[theme.color.lime, theme.color.limeDark]}
-                style={StyleSheet.absoluteFillObject as any}
-              />
-              <Ionicons name="camera" size={38} color={theme.color.onLime} />
-              <Text style={styles.bigCtaTitle}>Prendre une photo</Text>
-              <Text style={styles.bigCtaSub}>Ouverture de la caméra</Text>
-            </PressableScale>
+          <Animated.View entering={FadeInDown.duration(420).delay(120)}>
+            <Animated.View style={pulseStyle}>
+              <PressableScale
+                testID="scan-camera-btn"
+                hapticStyle="heavy"
+                accessibilityRole="button"
+                accessibilityLabel="Prendre une photo"
+                onPress={pickFromCamera}
+                style={styles.bigCta}
+              >
+                <LinearGradient
+                  colors={[theme.color.lime, theme.color.limeDark]}
+                  style={StyleSheet.absoluteFillObject as any}
+                />
+                <Ionicons name="camera" size={38} color={theme.color.onLime} />
+                <Text style={styles.bigCtaTitle}>Prendre une photo</Text>
+                <Text style={styles.bigCtaSub}>Ouverture de la caméra</Text>
+              </PressableScale>
+            </Animated.View>
           </Animated.View>
 
           <Animated.View entering={FadeInDown.duration(360).delay(180)}>
@@ -476,7 +481,7 @@ export default function ScanScreen() {
                 <Text style={styles.resultPriceLabel}>Prix recommandé</Text>
                 <Text style={styles.resultPriceValue}>{formatEUR(previewItem.listing.price)}</Text>
                 <Text style={styles.resultRange}>
-                  Marché : {formatEUR(previewItem.market_low)} – {formatEUR(previewItem.market_high)}
+                  Estimé par l{"\u2019"}IA : {formatEUR(previewItem.market_low)} – {formatEUR(previewItem.market_high)}
                 </Text>
               </View>
             </Animated.View>
@@ -603,8 +608,8 @@ const styles = StyleSheet.create({
   progressFill: { height: 4, backgroundColor: theme.color.lime, borderRadius: 2 },
   progressGlow: {
     position: "absolute", top: -3, width: 10, height: 10, borderRadius: 5,
-    backgroundColor: theme.color.lime, shadowColor: theme.color.lime,
-    shadowOpacity: 0.8, shadowRadius: 6, shadowOffset: { width: 0, height: 0 },
+    backgroundColor: theme.color.lime,
+    boxShadow: "0px 0px 6px rgba(212,255,63,0.8)",
     marginLeft: -5,
   },
   analyzePct: {

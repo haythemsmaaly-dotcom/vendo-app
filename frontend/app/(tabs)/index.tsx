@@ -103,6 +103,8 @@ export default function HomeScreen() {
           <PressableScale
             testID="scan-primary-cta"
             hapticStyle="medium"
+            accessibilityRole="button"
+            accessibilityLabel="Scanner un objet"
             onPress={() => router.push("/(tabs)/scan")}
             style={styles.primaryCta}
           >

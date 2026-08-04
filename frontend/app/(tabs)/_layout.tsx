@@ -105,10 +105,7 @@ const styles = StyleSheet.create({
     backgroundColor: theme.color.lime,
     alignItems: "center", justifyContent: "center",
     marginTop: -18,
-    shadowColor: theme.color.lime,
-    shadowOpacity: 0.4,
-    shadowRadius: 12,
-    shadowOffset: { width: 0, height: 4 },
+    boxShadow: "0px 4px 12px rgba(212,255,63,0.4)",
   },
   scanCtaActive: {
     backgroundColor: theme.color.limeDark,

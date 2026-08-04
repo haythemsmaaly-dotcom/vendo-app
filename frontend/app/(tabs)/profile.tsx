@@ -2,15 +2,17 @@ import React, { useCallback, useState } from "react";
 import { View, Text, StyleSheet, ScrollView, Switch } from "react-native";
 import { SafeAreaView } from "react-native-safe-area-context";
 import { Ionicons } from "@expo/vector-icons";
-import { useFocusEffect } from "expo-router";
+import { useFocusEffect, useRouter } from "expo-router";
 import Animated, { FadeInDown } from "react-native-reanimated";
 import { theme, formatEUR } from "@/src/theme";
 import { api } from "@/src/api";
+import { storage } from "@/src/utils/storage";
 import PressableScale from "@/src/components/PressableScale";
 import Skeleton from "@/src/components/Skeleton";
 import AnimatedNumber from "@/src/components/AnimatedNumber";
 
 export default function ProfileScreen() {
+  const router = useRouter();
   const [stats, setStats] = useState<{ total_items: number; items_sold: number; total_earned: number; average_sale_price: number; total_potential: number } | null>(null);
   const [notifs, setNotifs] = useState(true);
   const [priceAlerts, setPriceAlerts] = useState(true);
@@ -19,6 +21,11 @@ export default function ProfileScreen() {
     try { setStats(await api.stats()); } catch (e) { console.warn(e); }
   }, []);
   useFocusEffect(useCallback(() => { load(); }, [load]));
+
+  const replayOnboarding = useCallback(async () => {
+    await storage.setItem("vendo.onboarding.done", false);
+    router.replace("/onboarding");
+  }, [router]);
 
   const loading = !stats;
 
@@ -82,6 +89,12 @@ export default function ProfileScreen() {
             <LinkRow icon="help-circle-outline" label="Centre d'aide" testID="sup-help" />
             <LinkRow icon="chatbubble-ellipses-outline" label="Nous contacter" testID="sup-contact" />
             <LinkRow icon="star-outline" label="Noter Vendo" testID="sup-rate" />
+            <LinkRow
+              icon="play-circle-outline"
+              label="Revoir le tutoriel"
+              testID="sup-replay-onboarding"
+              onPress={replayOnboarding}
+            />
           </Section>
         </Animated.View>
 
@@ -132,9 +145,9 @@ function ToggleRow({ icon, label, value, onChange, testID }: any) {
   );
 }
 
-function LinkRow({ icon, label, testID }: any) {
+function LinkRow({ icon, label, testID, onPress }: any) {
   return (
-    <PressableScale style={styles.row} hapticStyle="selection" testID={testID}>
+    <PressableScale style={styles.row} hapticStyle="selection" testID={testID} onPress={onPress} accessibilityRole="button" accessibilityLabel={label}>
       <View style={styles.rowIcon}><Ionicons name={icon} size={18} color={theme.color.text} /></View>
       <Text style={styles.rowLabel}>{label}</Text>
       <Ionicons name="chevron-forward" size={16} color={theme.color.textMuted} />

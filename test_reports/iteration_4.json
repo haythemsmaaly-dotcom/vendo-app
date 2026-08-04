@@ -1,0 +1,37 @@
+{
+  "summary": "Iteration 4 — full regression, all phases validated. Backend: 15/15 pytest pass (test_analyze.py now also asserts condition_reasons is a list of strings, max 4 items; real Gemini 3 Flash calls on sneaker/watch/multi-image all return the new field). Frontend (mobile 390x844): first-launch onboarding path works end-to-end — clearing localStorage forces /onboarding, all 3 slides render with icons camera/sparkles/trending-up, testIDs onboarding-skip / onboarding-dots / onboarding-next (slides 0-1) / onboarding-start (slide 2) all present. Tapping Continuer advances slides, tapping Commencer à scanner sets flag and navigates to /(tabs). Reload after completion goes DIRECTLY to home (no onboarding). Profile has new 'Revoir le tutoriel' row (testID sup-replay-onboarding) that clears flag and re-shows onboarding; onboarding-skip navigates back to /(tabs). Scan sample flow: analyze-btn triggers progress with the new step 'J'évalue l'état visible…' — the old 'Je consulte le marché…' string is GONE. Results view shows 'Estimé par l'IA :' label and detail view shows 'Marché estimé par l'IA :' label. Console warnings audit: 0 shadow* deprecation warnings AND 0 Reanimated wrapper warnings on mount (both iter3 issues confirmed fixed). Sample-scan items (no condition_reasons) do NOT crash detail screen and correctly hide the 'Ce que Vendo voit' section — the section is gated on item.condition_reasons length > 0. For AI-analyzed items condition_reasons is populated (validated at API level in pytest).",
+  "backend_issues": { "critical": [], "minor": [] },
+  "frontend_issues": {
+    "ui_bugs": [],
+    "integration_issues": [],
+    "design_issues": [],
+    "react_native_issues": []
+  },
+  "test_report_links": [
+    "/app/backend/tests/test_vendo_api.py",
+    "/app/backend/tests/test_analyze.py",
+    "/app/test_reports/pytest/pytest_iter4.xml"
+  ],
+  "action_items": [
+    "None required — all iteration 4 goals verified.",
+    "(Non-blocking, pre-existing) scan.tsx sample-mode: useSampleImage picks a catalog entry for the photo (line 107-110), but startAnalysis then calls pickRandom(CATALOG) again (line 190) for the metadata. Result: on a sample scan the displayed photo can be from one product while brand/name/price are from another (observed: sneaker photo with 'APPLE iPhone 14 Pro' metadata). Fix would be to persist and reuse the same catalog entry between useSampleImage and startAnalysis. Cosmetic only — real AI flow is unaffected."
+  ],
+  "critical_code_review_comments": [
+    "server.py:66,180,203-224 — condition_reasons cleanly added to Item, AnalyzedItem, and VISION_SYSTEM_PROMPT. Coerced via _list() and capped at 4 in the AnalyzedItem builder (line 366). Defaults to [] on both models so old DB items without the field deserialize fine.",
+    "onboarding.tsx — 3 slides, testIDs correct, Skip has hitSlop=8, both Skip and CTA have accessibilityRole/accessibilityLabel. Uses SafeAreaView edges top+bottom which is correct.",
+    "_layout.tsx:35-49 — onboarding check runs once after fonts ready, uses router.replace('/onboarding') when flag is false. Correct one-shot pattern with cancelled flag to avoid setState after unmount.",
+    "profile.tsx:25-28,92-97 — replayOnboarding sets flag back to false then router.replace('/onboarding'). Correct.",
+    "item/[id].tsx:365-378 — 'Ce que Vendo voit' section correctly gated on item.condition_reasons && length > 0, so legacy items without the field render fine.",
+    "scan.tsx:24-30 — PROGRESS_STEPS no longer contains 'Je consulte le marché…' and now includes 'J'évalue l'état visible…' as spec'd. scan.tsx:484 uses 'Estimé par l'IA' and item/[id].tsx:262 uses 'Marché estimé par l'IA'."
+  ],
+  "updated_files": ["/app/backend/tests/test_analyze.py"],
+  "success_rate": {
+    "backend": "100% (15/15 pytest)",
+    "frontend": "100% (onboarding first-launch, skip, next, start, flag persist, profile replay, home reload, scan sample flow, new progress step text, results/detail label copy, condition_reasons gating — all verified; 0 shadow* / 0 Reanimated warnings)"
+  },
+  "seed_data_creation": "None. Sample scan creates one draft item per run as in previous iterations.",
+  "retest_needed": false,
+  "should_main_agent_self_test": true,
+  "context_for_next_testing_agent": "Reuse /app/backend/tests/test_analyze.py + /app/backend/tests/test_vendo_api.py (run with EXPO_PUBLIC_BACKEND_URL exported = EXPO_BACKEND_URL from frontend/.env). To force onboarding for frontend testing: page.evaluate(\"() => { Object.keys(localStorage).filter(k => k.includes('vendo') || k.includes('onboarding')).forEach(k => localStorage.removeItem(k)); }\") then page.reload(). AsyncStorage on web writes to key 'vendo.onboarding.done' AND '@vendo:vendo.onboarding.done' (RN Web shim). To skip onboarding programmatically, set both to JSON.stringify(true). The condition_reasons field is only populated by REAL AI (api.analyze) — sample-scan items go through pickRandom(CATALOG) and won't have it, so 'Ce que Vendo voit' section will (correctly) not render there. To verify the section in-UI, seed an item via POST /api/items with condition_reasons=['reason1','reason2'] and navigate to /item/{id}.",
+  "rca_of_issue": "N/A — no regressions or new bugs."
+}

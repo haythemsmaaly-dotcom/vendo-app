@@ -48,6 +48,7 @@ export type Item = {
   model?: string;
   category: string;
   condition: string;
+  condition_reasons?: string[];
   confidence: number;
   missing_info: string[];
   photo_coach: string[];
@@ -71,6 +72,7 @@ export type AnalyzedItem = {
   model?: string | null;
   category: string;
   condition: string;
+  condition_reasons?: string[];
   confidence: number;
   missing_info: string[];
   photo_coach: string[];
