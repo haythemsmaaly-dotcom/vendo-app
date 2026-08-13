@@ -169,6 +169,7 @@ async def stats():
 # --------- Vision AI: item identification ---------
 class AnalyzeRequest(BaseModel):
     photos: List[str]  # data URIs or raw base64 strings (JPEG/PNG/WEBP)
+    locale: Optional[str] = "fr"  # ISO code — target language for AI-generated text
 
 
 class AnalyzedItem(BaseModel):
@@ -187,7 +188,7 @@ class AnalyzedItem(BaseModel):
     description: str
 
 
-VISION_SYSTEM_PROMPT = """Tu es Vendo, expert en reconnaissance d'objets d'occasion et en estimation de leur état pour la revente (marché européen en euros).
+VISION_SYSTEM_PROMPT_FR = """Tu es Vendo, expert en reconnaissance d'objets d'occasion et en estimation de leur état pour la revente (marché européen en euros).
 
 À partir d'une ou plusieurs photos d'un objet, tu identifies l'objet ET tu évalues rigoureusement son état visible.
 
@@ -200,11 +201,11 @@ Champs OBLIGATOIRES :
   "model": "Référence exacte du modèle si visible/identifiable, sinon null",
   "category": "Une des catégories: Sneakers, Vêtements, Sacs, Montres, Audio, Téléphones, Tablettes, Ordinateurs, Consoles, Jeux vidéo, Livres, Décoration, Meubles, Bijoux, Instruments, Sport, Jouets, Autre",
   "condition": "Neuf | Très bon | Bon | Correct | Usé",
-  "condition_reasons": ["Éléments VISIBLES qui justifient la note d'état, en français, max 4 phrases courtes. Ex: 'Rayures visibles sur la semelle', 'Boîte présente et intacte', 'Aucune usure apparente sur le cuir'. Ne mentionne QUE ce que tu vois réellement. Si tu ne vois pas de défaut, dis-le explicitement."],
+  "condition_reasons": ["Éléments VISIBLES qui justifient la note d'état, en français, max 4 phrases courtes"],
   "confidence": 0-100,
-  "missing_info": ["Informations manquantes que l'utilisateur devrait vérifier, en français, max 3. Ex: 'Batterie état ?', 'Boîte d'origine ?'"],
-  "photo_coach": ["Photos additionnelles à prendre pour améliorer l'annonce, en français, max 3. Ex: 'Photo de l'étiquette de taille', 'Gros plan sur la semelle'"],
-  "market_low": nombre en EUR (borne basse plausible du marché d'occasion actuel — estimation IA, non basée sur données live),
+  "missing_info": ["Informations manquantes à vérifier, en français, max 3"],
+  "photo_coach": ["Photos additionnelles à prendre pour améliorer l'annonce, en français, max 3"],
+  "market_low": nombre en EUR (borne basse plausible du marché d'occasion — estimation IA),
   "market_high": nombre en EUR (borne haute plausible — estimation IA),
   "keywords": ["5-8 mots-clés français pour l'annonce"],
   "description": "Description d'annonce professionnelle en français, 2-4 phrases, mettant en valeur l'objet ET mentionnant honnêtement les défauts visibles"
@@ -213,15 +214,37 @@ Champs OBLIGATOIRES :
 Règles strictes :
 - Ne PRÉTENDS PAS voir un défaut, un accessoire ou un détail qui n'est pas visible sur les photos.
 - Si l'angle ou la lumière ne permet pas d'évaluer, mets confidence bas et ajoute une entrée dans missing_info/photo_coach.
-- Grille de condition :
-  * Neuf : aucun défaut, emballage/étiquettes présents
-  * Très bon : quasi neuf, micro-marques d'usage à peine visibles
-  * Bon : usage visible normal, aucun défaut majeur
-  * Correct : défauts esthétiques visibles mais fonctionnel
-  * Usé : défauts importants ou usure marquée
-- market_low et market_high doivent être cohérents (low < high) et refléter le marché de l'occasion, pas le neuf. Ce sont des estimations IA, PAS des prix issus de données marché en direct.
-- Utilise TOUJOURS le français pour tous les textes.
-- Retourne UNIQUEMENT le JSON, sans commentaire, sans balise markdown."""
+- Garde les noms de marques et références de modèles dans leur forme d'origine (ne les traduis PAS).
+- Retourne UNIQUEMENT le JSON."""
+
+VISION_SYSTEM_PROMPT_EN = """You are Vendo, an expert in second-hand item recognition and condition assessment for resale (European market, prices in the user's currency but you always output EUR-comparable numbers).
+
+From one or more photos of an item, you identify the item AND rigorously assess its visible condition.
+
+Return ONLY a valid JSON object (no surrounding text, no markdown fences).
+
+REQUIRED fields:
+{
+  "name": "Product name (e.g. Air Jordan 1 High, Sony WH-1000XM5 headphones)",
+  "brand": "Brand (e.g. Nike, Sony, Apple)",
+  "model": "Exact model reference if visible, otherwise null",
+  "category": "One of: Sneakers, Clothing, Bags, Watches, Audio, Phones, Tablets, Computers, Consoles, Video games, Books, Decoration, Furniture, Jewelry, Instruments, Sport, Toys, Other",
+  "condition": "New | Very good | Good | Fair | Worn",
+  "condition_reasons": ["VISIBLE elements justifying the condition, in English, max 4 short sentences"],
+  "confidence": 0-100,
+  "missing_info": ["Information the user should verify, in English, max 3"],
+  "photo_coach": ["Additional photos to take to improve the listing, in English, max 3"],
+  "market_low": number in EUR (plausible used-market low — AI estimate, NOT live market data),
+  "market_high": number in EUR (plausible used-market high — AI estimate),
+  "keywords": ["5-8 English keywords for the listing"],
+  "description": "Professional English listing description, 2-4 sentences, showcasing the item AND honestly mentioning any visible defects"
+}
+
+Strict rules:
+- Do NOT pretend to see a defect, accessory or detail that isn't visible in the photos.
+- If angle or lighting doesn't allow a full assessment, use a low confidence and add entries to missing_info/photo_coach.
+- Keep brand names and model references in their original form (do NOT translate them).
+- Return ONLY the JSON."""
 
 
 def _extract_json(text: str) -> Optional[dict]:
@@ -298,14 +321,16 @@ async def analyze_item(req: AnalyzeRequest):
     if not images:
         raise HTTPException(status_code=400, detail="No valid base64 image provided")
 
+    system_prompt = VISION_SYSTEM_PROMPT_EN if (req.locale or "").lower().startswith("en") else VISION_SYSTEM_PROMPT_FR
+
     chat = LlmChat(
         api_key=api_key,
         session_id=f"vendo-analyze-{uuid.uuid4().hex[:8]}",
-        system_message=VISION_SYSTEM_PROMPT,
+        system_message=system_prompt,
     ).with_model("gemini", "gemini-3-flash-preview")
 
     user_msg = UserMessage(
-        text="Identifie cet objet et retourne le JSON demandé.",
+        text="Identify this item and return the requested JSON." if system_prompt is VISION_SYSTEM_PROMPT_EN else "Identifie cet objet et retourne le JSON demandé.",
         file_contents=images,
     )
 
@@ -339,7 +364,7 @@ async def analyze_item(req: AnalyzeRequest):
             low = max(high * 0.5, 5.0)
 
         cond = _s(data.get("condition"), "Bon")
-        valid_cond = {"Neuf", "Très bon", "Bon", "Correct", "Usé"}
+        valid_cond = {"Neuf", "Très bon", "Bon", "Correct", "Usé", "New", "Very good", "Good", "Fair", "Worn"}
         if cond not in valid_cond:
             # Best-effort mapping
             low_cond = cond.lower()

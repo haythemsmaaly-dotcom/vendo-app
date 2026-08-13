@@ -1,6 +1,6 @@
 import React, { useCallback, useRef, useState } from "react";
 import {
-  View, Text, StyleSheet, Dimensions, ScrollView, NativeScrollEvent, NativeSyntheticEvent,
+  View, Text, StyleSheet, ScrollView, NativeScrollEvent, NativeSyntheticEvent, useWindowDimensions,
 } from "react-native";
 import { SafeAreaView } from "react-native-safe-area-context";
 import { LinearGradient } from "expo-linear-gradient";
@@ -11,35 +11,21 @@ import * as Haptics from "expo-haptics";
 
 import { theme } from "@/src/theme";
 import { storage } from "@/src/utils/storage";
+import { useSettings } from "@/src/i18n/SettingsContext";
+import { dictionaries } from "@/src/i18n";
 import PressableScale from "@/src/components/PressableScale";
 
-const { width } = Dimensions.get("window");
-
-const SLIDES = [
-  {
-    icon: "camera" as const,
-    tag: "01",
-    title: "Photographiez-le",
-    body: "Prenez 1 à 3 photos de l'objet que vous voulez vendre. C'est tout ce qu'on demande.",
-  },
-  {
-    icon: "sparkles" as const,
-    tag: "02",
-    title: "Vendo l'identifie",
-    body: "Notre IA reconnaît le produit, la marque, le modèle et évalue son état à partir de vos photos.",
-  },
-  {
-    icon: "trending-up" as const,
-    tag: "03",
-    title: "Connaissez sa valeur",
-    body: "Comprenez le marché, choisissez votre prix et publiez une annonce prête à vendre.",
-  },
-];
+const SLIDE_ICONS = ["camera", "sparkles", "trending-up"] as const;
 
 export default function Onboarding() {
   const router = useRouter();
+  const { t, settings } = useSettings();
+  const { width } = useWindowDimensions();
   const [idx, setIdx] = useState(0);
   const scrollRef = useRef<ScrollView>(null);
+
+  const SLIDES = (dictionaries[settings.locale]?.onboarding?.slides
+    || dictionaries.fr.onboarding.slides) as unknown as { title: string; body: string }[];
 
   const goTo = (i: number) => {
     scrollRef.current?.scrollTo({ x: i * width, animated: true });
@@ -71,13 +57,13 @@ export default function Onboarding() {
         <PressableScale
           testID="onboarding-skip"
           accessibilityRole="button"
-          accessibilityLabel="Passer l'introduction"
+          accessibilityLabel={t("common.skip")}
           hapticStyle="selection"
           onPress={finish}
           hitSlop={8}
           style={styles.skipBtn}
         >
-          <Text style={styles.skipTxt}>Passer</Text>
+          <Text style={styles.skipTxt}>{t("common.skip")}</Text>
         </PressableScale>
       </View>
 
@@ -103,7 +89,7 @@ export default function Onboarding() {
                 style={styles.artGlow}
               />
               <View style={styles.artCircle}>
-                <Ionicons name={s.icon} size={64} color={theme.color.lime} />
+                <Ionicons name={SLIDE_ICONS[i] || "sparkles"} size={64} color={theme.color.lime} />
               </View>
               <View style={styles.artRing1} />
               <View style={styles.artRing2} />
@@ -114,7 +100,7 @@ export default function Onboarding() {
                 entering={FadeInUp.duration(360).delay(80)}
                 style={styles.tag}
               >
-                {s.tag} · {SLIDES.length.toString().padStart(2, "0")}
+                {String(i + 1).padStart(2, "0")} · {SLIDES.length.toString().padStart(2, "0")}
               </Animated.Text>
               <Animated.Text
                 entering={FadeInUp.duration(420).delay(140)}
@@ -154,7 +140,7 @@ export default function Onboarding() {
             testID={isLast ? "onboarding-start" : "onboarding-next"}
             hapticStyle="medium"
             accessibilityRole="button"
-            accessibilityLabel={isLast ? "Commencer à scanner" : "Continuer"}
+            accessibilityLabel={isLast ? t("onboarding.start") : t("common.continue")}
             onPress={() => (isLast ? finish() : goTo(idx + 1))}
             style={styles.cta}
           >
@@ -162,7 +148,7 @@ export default function Onboarding() {
               colors={[theme.color.lime, theme.color.limeDark]}
               style={StyleSheet.absoluteFillObject as any}
             />
-            <Text style={styles.ctaTxt}>{isLast ? "Commencer à scanner" : "Continuer"}</Text>
+            <Text style={styles.ctaTxt}>{isLast ? t("onboarding.start") : t("common.continue")}</Text>
             <Ionicons
               name={isLast ? "scan" : "arrow-forward"}
               size={20}

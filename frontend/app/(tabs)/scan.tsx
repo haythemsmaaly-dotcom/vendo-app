@@ -16,6 +16,7 @@ import Animated, {
 import { theme, formatEUR, conditionColor } from "@/src/theme";
 import { api, Item, AnalyzedItem } from "@/src/api";
 import { CATALOG, pickRandom, computePriceStrategies, computeSellPlan, computeSellScore } from "@/src/catalog";
+import { useSettings } from "@/src/i18n/SettingsContext";
 import PressableScale from "@/src/components/PressableScale";
 import SellScoreRing from "@/src/components/SellScoreRing";
 
@@ -31,6 +32,7 @@ const PROGRESS_STEPS = [
 
 export default function ScanScreen() {
   const router = useRouter();
+  const { settings } = useSettings();
   const [phase, setPhase] = useState<Phase>("idle");
   const [photos, setPhotos] = useState<string[]>([]);
   const [progress, setProgress] = useState(0);
@@ -62,6 +64,8 @@ export default function ScanScreen() {
     ), -1, true);
   }, [pulse]);
   const pulseStyle = useAnimatedStyle(() => ({ transform: [{ scale: pulse.value }] }));
+
+  const sampleEntryRef = useRef<any>(null);
 
   const pickFromCamera = async () => {
     const perm = await ImagePicker.requestCameraPermissionsAsync();
@@ -105,6 +109,7 @@ export default function ScanScreen() {
     // Local demo: bypasses real AI and produces a full sample item.
     // This is the ONLY place the mock catalog is still used deliberately.
     const entry = pickRandom(CATALOG);
+    sampleEntryRef.current = entry;
     setPhotos([entry.fallbackPhoto]);
     setPhase("preview");
   };
@@ -187,10 +192,12 @@ export default function ScanScreen() {
       if (sampleMode) {
         // Demo image path: use catalog directly. Give a bit of "analyzing" time.
         await new Promise(r => setTimeout(r, 2600));
-        entry = pickRandom(CATALOG);
+        // Reuse the entry picked when the sample photo was inserted so photo ↔ metadata match.
+        entry = sampleEntryRef.current || pickRandom(CATALOG);
+        sampleEntryRef.current = null;
       } else {
         // REAL AI. No silent fallback: any failure surfaces to the user.
-        entry = await api.analyze(photos);
+        entry = await api.analyze(photos, settings.locale);
       }
 
       cancelled = true; clearInterval(stepTick);

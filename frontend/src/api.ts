@@ -109,10 +109,10 @@ export const api = {
         average_sale_price: number;
       }>(r),
     ),
-  analyze: (photos: string[]) =>
+  analyze: (photos: string[], locale?: string) =>
     fetch(`${API_BASE}/analyze`, {
       method: 'POST',
       headers: { 'Content-Type': 'application/json' },
-      body: JSON.stringify({ photos }),
+      body: JSON.stringify({ photos, locale: locale || 'fr' }),
     }).then(r => j<AnalyzedItem>(r)),
 };

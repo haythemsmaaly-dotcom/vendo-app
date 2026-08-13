@@ -16,7 +16,9 @@ SAMPLE_URLS = [
     "https://images.pexels.com/photos/18254091/pexels-photo-18254091.jpeg?auto=compress&cs=tinysrgb&w=800",  # headphones
 ]
 
-VALID_CONDITIONS = {"Neuf", "Très bon", "Bon", "Correct", "Usé"}
+VALID_CONDITIONS_FR = {"Neuf", "Très bon", "Bon", "Correct", "Usé"}
+VALID_CONDITIONS_EN = {"New", "Very good", "Good", "Fair", "Worn"}
+VALID_CONDITIONS = VALID_CONDITIONS_FR | VALID_CONDITIONS_EN
 
 
 def _download_and_encode(url: str, max_side: int = 800) -> str:
@@ -114,3 +116,131 @@ def test_analyze_invalid_base64_returns_400():
     bad = "!!!not-base64-at-all###"
     r = requests.post(f"{API}/analyze", json={"photos": [bad]}, timeout=30)
     assert r.status_code == 400, r.text
+
+
+# ---------- Locale (Iteration 5) ----------
+FRENCH_HINTS = ["é", "è", "à", "ê"]
+
+
+def _looks_french(text: str) -> bool:
+    return any(c in text.lower() for c in FRENCH_HINTS) or " et " in f" {text.lower()} " or "avec" in text.lower()
+
+
+class TestLocale:
+    """/api/analyze accepts optional 'locale' — 'fr' (default) or 'en'."""
+
+    def test_locale_en_returns_english_condition_and_desc(self, sneaker_b64):
+        r = requests.post(
+            f"{API}/analyze",
+            json={"photos": [sneaker_b64], "locale": "en"},
+            timeout=90,
+        )
+        assert r.status_code == 200, r.text
+        d = r.json()
+        _assert_analyzed_schema(d)
+        assert d["condition"] in VALID_CONDITIONS_EN, f"EN locale should return English condition, got {d['condition']}"
+        # Description should look like English (no accents typical of French)
+        assert d["description"] and not _looks_french(d["description"]), (
+            f"EN description looks French: {d['description'][:200]}"
+        )
+
+    def test_locale_fr_returns_french_condition(self, watch_b64):
+        r = requests.post(
+            f"{API}/analyze",
+            json={"photos": [watch_b64], "locale": "fr"},
+            timeout=90,
+        )
+        assert r.status_code == 200, r.text
+        d = r.json()
+        _assert_analyzed_schema(d)
+        assert d["condition"] in VALID_CONDITIONS_FR, f"FR locale should return French condition, got {d['condition']}"
+
+    def test_locale_default_is_french(self, sneaker_b64):
+        # No locale field -> must default to fr
+        r = requests.post(
+            f"{API}/analyze",
+            json={"photos": [sneaker_b64]},
+            timeout=90,
+        )
+        assert r.status_code == 200, r.text
+        d = r.json()
+        _assert_analyzed_schema(d)
+        assert d["condition"] in VALID_CONDITIONS_FR, f"default should be FR, got {d['condition']}"
+
+
+# ---------- Regression: items CRUD + stats (Iteration 5) ----------
+def _minimal_item_payload():
+    return {
+        "photo": "data:image/jpeg;base64,AAA",
+        "photos": [],
+        "name": "TEST_regression_item",
+        "category": "Autre",
+        "condition": "Bon",
+        "condition_reasons": ["Reason A"],
+        "confidence": 80,
+        "missing_info": [],
+        "photo_coach": [],
+        "market_low": 10.0,
+        "market_high": 30.0,
+        "strategies": [
+            {"key": "fast", "label": "Fast", "price": 12.0, "explanation": "x"},
+            {"key": "smart", "label": "Smart", "price": 18.0, "explanation": "x"},
+            {"key": "max", "label": "Max", "price": 26.0, "explanation": "x"},
+        ],
+        "selected_strategy": "smart",
+        "listing": {
+            "title": "TEST title", "description": "TEST desc", "category": "Autre",
+            "keywords": ["a", "b"], "condition": "Bon", "price": 18.0,
+        },
+        "sell_score": 60,
+        "sell_score_breakdown": {"photos": 20, "titre": 20},
+        "sell_plan": {
+            "mode": "balanced", "start_price": 18.0, "adjusted_price": 16.0,
+            "minimum_price": 12.0, "target_date": "2026-12-01", "adjustment_days": 7,
+        },
+        "status": "draft",
+    }
+
+
+class TestItemsRegression:
+    """No regression on /api/items + /api/stats after i18n/marketplace additions."""
+
+    def test_create_get_update_delete_flow(self):
+        payload = _minimal_item_payload()
+        r = requests.post(f"{API}/items", json=payload, timeout=30)
+        assert r.status_code == 200, r.text
+        created = r.json()
+        assert created["name"] == "TEST_regression_item"
+        assert created["condition_reasons"] == ["Reason A"]
+        iid = created["id"]
+
+        g = requests.get(f"{API}/items/{iid}", timeout=15)
+        assert g.status_code == 200
+        assert g.json()["id"] == iid
+
+        p = requests.patch(
+            f"{API}/items/{iid}",
+            json={"status": "ready", "sell_score": 88},
+            timeout=15,
+        )
+        assert p.status_code == 200
+        assert p.json()["status"] == "ready"
+        assert p.json()["sell_score"] == 88
+
+        d = requests.delete(f"{API}/items/{iid}", timeout=15)
+        assert d.status_code == 200
+        assert requests.get(f"{API}/items/{iid}", timeout=15).status_code == 404
+
+    def test_list_items(self):
+        r = requests.get(f"{API}/items", timeout=15)
+        assert r.status_code == 200
+        assert isinstance(r.json(), list)
+
+    def test_stats(self):
+        r = requests.get(f"{API}/stats", timeout=15)
+        assert r.status_code == 200
+        d = r.json()
+        for k in ("total_items", "total_potential", "items_sold", "total_earned", "average_sale_price"):
+            assert k in d
+        assert isinstance(d["total_items"], int)
+

@@ -20,12 +20,15 @@ import Sparkline from "@/src/components/Sparkline";
 import PressableScale from "@/src/components/PressableScale";
 import Skeleton from "@/src/components/Skeleton";
 import { computeSellPlan, computeSellScore } from "@/src/catalog";
+import { useSettings } from "@/src/i18n/SettingsContext";
+import { MARKETPLACES, copyListingToClipboard, openMarketplace, shareListingNative } from "@/src/marketplace";
 
 const HERO_H = 380;
 
 export default function ItemDetail() {
   const { id } = useLocalSearchParams<{ id: string }>();
   const router = useRouter();
+  const { t, settings } = useSettings();
   const { width: W } = useWindowDimensions();
   const [item, setItem] = useState<Item | null>(null);
   const [saving, setSaving] = useState(false);
@@ -35,6 +38,7 @@ export default function ItemDetail() {
   const [draftPrice, setDraftPrice] = useState("");
   const [planMode, setPlanMode] = useState<"quick" | "balanced" | "best">("balanced");
   const [activePhotoIdx, setActivePhotoIdx] = useState(0);
+  const [copiedToast, setCopiedToast] = useState(false);
 
   const scrollY = useSharedValue(0);
   const onScroll = useAnimatedScrollHandler({
@@ -172,8 +176,7 @@ export default function ItemDetail() {
           <LinearGradient
             colors={["transparent", "rgba(10,10,10,0.4)", theme.color.bg]}
             locations={[0, 0.6, 1]}
-            style={StyleSheet.absoluteFillObject as any}
-            pointerEvents="none"
+            style={[StyleSheet.absoluteFillObject, { pointerEvents: "none" }] as any}
           />
           <SafeAreaView edges={["top"]} style={styles.heroTop}>
             <PressableScale testID="detail-back" hapticStyle="selection" onPress={() => router.back()} style={styles.iconBtn}>
@@ -439,6 +442,66 @@ export default function ItemDetail() {
           </View>
         </Animated.View>
 
+        {/* Marketplace share — Phase 8 (compliant: prepare + copy + open) */}
+        <Animated.View entering={FadeInDown.duration(360).delay(300)} style={styles.section}>
+          <Text style={styles.sectionTitle}>{t("detail.share")}</Text>
+          <Text style={styles.sectionSub}>{t("detail.shareSubtitle")}</Text>
+          <View style={{ marginTop: 12, gap: 8 }}>
+            <PressableScale
+              testID="copy-listing-btn"
+              hapticStyle="medium"
+              onPress={async () => {
+                const ok = await copyListingToClipboard(item);
+                if (ok) {
+                  setCopiedToast(true);
+                  setTimeout(() => setCopiedToast(false), 1400);
+                }
+              }}
+              style={styles.copyRow}
+            >
+              <Ionicons name="copy-outline" size={18} color={theme.color.lime} />
+              <Text style={styles.copyTxt}>{copiedToast ? t("detail.listingCopied") : t("detail.copyListing")}</Text>
+              {copiedToast && <Ionicons name="checkmark-circle" size={16} color={theme.color.lime} />}
+            </PressableScale>
+          </View>
+          <View style={styles.mpGrid}>
+            {settings.marketplaces.map((mpId) => {
+              const mp = MARKETPLACES[mpId];
+              if (!mp) return null;
+              return (
+                <PressableScale
+                  key={mpId}
+                  testID={`mp-open-${mpId}`}
+                  hapticStyle="medium"
+                  onPress={async () => {
+                    // Compliant flow: copy first, then open the marketplace's own form.
+                    await copyListingToClipboard(item);
+                    await openMarketplace(mp);
+                    setCopiedToast(true);
+                    setTimeout(() => setCopiedToast(false), 1400);
+                  }}
+                  style={styles.mpCard}
+                >
+                  <View style={styles.mpIcon}>
+                    <Ionicons name="storefront-outline" size={18} color={theme.color.text} />
+                  </View>
+                  <Text style={styles.mpName} numberOfLines={1}>{mp.name}</Text>
+                  <Ionicons name="open-outline" size={14} color={theme.color.textMuted} />
+                </PressableScale>
+              );
+            })}
+          </View>
+          <PressableScale
+            testID="native-share-btn"
+            hapticStyle="selection"
+            onPress={() => shareListingNative(item)}
+            style={styles.nativeShare}
+          >
+            <Ionicons name="share-outline" size={18} color={theme.color.text} />
+            <Text style={styles.nativeShareTxt}>{t("common.share")}</Text>
+          </PressableScale>
+        </Animated.View>
+
         {/* Publish CTA */}
         <Animated.View entering={FadeInDown.duration(360).delay(320)} style={{ paddingHorizontal: 24, marginTop: 20 }}>
           <PressableScale
@@ -647,4 +710,34 @@ const styles = StyleSheet.create({
   },
   publishTxt: { color: theme.color.onLime, fontSize: 15, fontFamily: theme.font.textBold },
   statusHint: { color: theme.color.textMuted, fontSize: 12, textAlign: "center", marginTop: 10, fontFamily: theme.font.text },
+
+  // Marketplace share section
+  copyRow: {
+    flexDirection: "row", alignItems: "center", gap: 10,
+    paddingVertical: 12, paddingHorizontal: 14, borderRadius: 14,
+    backgroundColor: theme.color.limeSoft,
+    borderWidth: 1, borderColor: "rgba(212,255,63,0.35)",
+  },
+  copyTxt: { flex: 1, color: theme.color.lime, fontSize: 14, fontFamily: theme.font.textSemi },
+  mpGrid: { flexDirection: "row", flexWrap: "wrap", gap: 8, marginTop: 12 },
+  mpCard: {
+    flexDirection: "row", alignItems: "center", gap: 10,
+    paddingHorizontal: 14, height: 52, borderRadius: 14,
+    backgroundColor: theme.color.surface,
+    borderWidth: 1, borderColor: theme.color.border,
+    minWidth: "48%", flexGrow: 1,
+  },
+  mpIcon: {
+    width: 30, height: 30, borderRadius: 8,
+    backgroundColor: theme.color.surface2,
+    alignItems: "center", justifyContent: "center",
+  },
+  mpName: { flex: 1, color: theme.color.text, fontSize: 14, fontFamily: theme.font.textSemi },
+  nativeShare: {
+    marginTop: 12, height: 46, borderRadius: 14,
+    flexDirection: "row", alignItems: "center", justifyContent: "center", gap: 8,
+    backgroundColor: theme.color.surface,
+    borderWidth: 1, borderColor: theme.color.border,
+  },
+  nativeShareTxt: { color: theme.color.text, fontSize: 14, fontFamily: theme.font.textSemi },
 });

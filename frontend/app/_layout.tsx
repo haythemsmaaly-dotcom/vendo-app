@@ -9,6 +9,7 @@ import { useFonts } from "expo-font";
 import { useIconFonts } from "@/src/hooks/use-icon-fonts";
 import { theme } from "@/src/theme";
 import { storage } from "@/src/utils/storage";
+import { SettingsProvider } from "@/src/i18n/SettingsContext";
 
 LogBox.ignoreAllLogs(true);
 SplashScreen.preventAutoHideAsync();
@@ -56,27 +57,33 @@ export default function RootLayout() {
 
   return (
     <GestureHandlerRootView style={{ flex: 1, backgroundColor: theme.color.bg }}>
-      <BottomSheetModalProvider>
-        <View style={{ flex: 1, backgroundColor: theme.color.bg }}>
-          <Stack
-            screenOptions={{
-              headerShown: false,
-              contentStyle: { backgroundColor: theme.color.bg },
-              animation: "fade",
-            }}
-          >
-            <Stack.Screen name="(tabs)" options={{ animation: "fade" }} />
-            <Stack.Screen
-              name="onboarding"
-              options={{ animation: "fade", gestureEnabled: false }}
-            />
-            <Stack.Screen
-              name="item/[id]"
-              options={{ animation: "slide_from_right", animationDuration: 260 }}
-            />
-          </Stack>
-        </View>
-      </BottomSheetModalProvider>
+      <SettingsProvider>
+        <BottomSheetModalProvider>
+          <View style={{ flex: 1, backgroundColor: theme.color.bg }}>
+            <Stack
+              screenOptions={{
+                headerShown: false,
+                contentStyle: { backgroundColor: theme.color.bg },
+                animation: "fade",
+              }}
+            >
+              <Stack.Screen name="(tabs)" options={{ animation: "fade" }} />
+              <Stack.Screen
+                name="onboarding"
+                options={{ animation: "fade", gestureEnabled: false }}
+              />
+              <Stack.Screen
+                name="item/[id]"
+                options={{ animation: "slide_from_right", animationDuration: 260 }}
+              />
+              <Stack.Screen
+                name="settings/region"
+                options={{ animation: "slide_from_right", animationDuration: 260, presentation: "modal" }}
+              />
+            </Stack>
+          </View>
+        </BottomSheetModalProvider>
+      </SettingsProvider>
     </GestureHandlerRootView>
   );
 }

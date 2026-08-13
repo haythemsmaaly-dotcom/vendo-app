@@ -4,15 +4,17 @@ import { SafeAreaView } from "react-native-safe-area-context";
 import { Ionicons } from "@expo/vector-icons";
 import { useFocusEffect, useRouter } from "expo-router";
 import Animated, { FadeInDown } from "react-native-reanimated";
-import { theme, formatEUR } from "@/src/theme";
+import { theme } from "@/src/theme";
 import { api } from "@/src/api";
 import { storage } from "@/src/utils/storage";
+import { useSettings, SUPPORTED_LOCALES } from "@/src/i18n/SettingsContext";
 import PressableScale from "@/src/components/PressableScale";
 import Skeleton from "@/src/components/Skeleton";
 import AnimatedNumber from "@/src/components/AnimatedNumber";
 
 export default function ProfileScreen() {
   const router = useRouter();
+  const { t, formatMoney, settings } = useSettings();
   const [stats, setStats] = useState<{ total_items: number; items_sold: number; total_earned: number; average_sale_price: number; total_potential: number } | null>(null);
   const [notifs, setNotifs] = useState(true);
   const [priceAlerts, setPriceAlerts] = useState(true);
@@ -28,6 +30,7 @@ export default function ProfileScreen() {
   }, [router]);
 
   const loading = !stats;
+  const currentLocale = SUPPORTED_LOCALES.find(l => l.code === settings.locale);
 
   return (
     <SafeAreaView style={styles.safe} edges={["top"]}>
@@ -38,71 +41,97 @@ export default function ProfileScreen() {
           </View>
           <View style={{ flex: 1 }}>
             <Text style={styles.name}>Alex</Text>
-            <Text style={styles.sub}>Vendeur depuis mai 2026</Text>
+            <Text style={styles.sub}>{t("profile.memberSince")}</Text>
           </View>
-          <PressableScale style={styles.settingsBtn} testID="profile-settings-btn" hapticStyle="selection">
+          <PressableScale style={styles.settingsBtn} testID="profile-settings-btn" hapticStyle="selection" accessibilityLabel={t("profile.settingsBtn")}>
             <Ionicons name="settings-outline" size={20} color={theme.color.text} />
           </PressableScale>
         </Animated.View>
 
         <Animated.View entering={FadeInDown.duration(360).delay(60)} style={styles.statsWrap} testID="stats-grid">
           <View style={styles.statCellAccent} testID="stat-earned">
-            <Text style={[styles.statLabel, { color: "rgba(10,10,10,0.7)" }]}>Total gagné</Text>
+            <Text style={[styles.statLabel, { color: "rgba(10,10,10,0.7)" }]}>{t("profile.stats.earned")}</Text>
             {loading ? <Skeleton width={140} height={30} radius={8} style={{ marginTop: 8, backgroundColor: 'rgba(10,10,10,0.15)' }} /> : (
               <AnimatedNumber
                 value={stats?.total_earned ?? 0}
                 duration={900}
-                format={(n) => formatEUR(n)}
+                format={(n) => formatMoney(n)}
                 style={[styles.statValue, { color: theme.color.onLime }] as any}
               />
             )}
           </View>
           <View style={styles.statsRow}>
-            <StatCell label="Objets vendus" value={loading ? undefined : String(stats!.items_sold)} testID="stat-sold" />
+            <StatCell label={t("profile.stats.sold")} value={loading ? undefined : String(stats!.items_sold)} testID="stat-sold" />
             <View style={styles.statDivider} />
-            <StatCell label="Prix moyen" value={loading ? undefined : formatEUR(stats!.average_sale_price)} testID="stat-avg" />
+            <StatCell label={t("profile.stats.avg")} value={loading ? undefined : formatMoney(stats!.average_sale_price)} testID="stat-avg" />
           </View>
           <View style={styles.statsRow}>
-            <StatCell label="En attente" value={loading ? undefined : String(stats!.total_items)} testID="stat-total" />
+            <StatCell label={t("profile.stats.total")} value={loading ? undefined : String(stats!.total_items)} testID="stat-total" />
             <View style={styles.statDivider} />
-            <StatCell label="Potentiel" value={loading ? undefined : formatEUR(stats!.total_potential)} testID="stat-potential" />
+            <StatCell label={t("profile.stats.potential")} value={loading ? undefined : formatMoney(stats!.total_potential)} testID="stat-potential" />
           </View>
         </Animated.View>
 
+        <Animated.View entering={FadeInDown.duration(360).delay(120)}>
+          <Section title={t("profile.regionSection")}>
+            <LinkRow
+              icon="language-outline"
+              label={t("profile.language")}
+              value={`${currentLocale?.flag || ""} ${currentLocale?.label || ""}`}
+              testID="region-language-link"
+              onPress={() => router.push("/settings/region")}
+            />
+            <LinkRow
+              icon="flag-outline"
+              label={t("profile.country")}
+              value={t(`countries.${settings.country}`)}
+              testID="region-country-link"
+              onPress={() => router.push("/settings/region")}
+            />
+            <LinkRow
+              icon="cash-outline"
+              label={t("profile.currency")}
+              value={settings.currency}
+              testID="region-currency-link"
+              onPress={() => router.push("/settings/region")}
+            />
+          </Section>
+        </Animated.View>
+
         <Animated.View entering={FadeInDown.duration(360).delay(140)}>
-          <Section title="Préférences">
-            <ToggleRow icon="notifications-outline" label="Notifications" value={notifs} onChange={setNotifs} testID="pref-notifs" />
-            <ToggleRow icon="trending-up-outline" label="Alertes prix marché" value={priceAlerts} onChange={setPriceAlerts} testID="pref-price" />
+          <Section title={t("profile.preferences")}>
+            <ToggleRow icon="notifications-outline" label={t("profile.notifs")} value={notifs} onChange={setNotifs} testID="pref-notifs" />
+            <ToggleRow icon="trending-up-outline" label={t("profile.priceAlerts")} value={priceAlerts} onChange={setPriceAlerts} testID="pref-price" />
           </Section>
         </Animated.View>
 
         <Animated.View entering={FadeInDown.duration(360).delay(200)}>
-          <Section title="Compte">
-            <LinkRow icon="person-outline" label="Informations personnelles" testID="acc-info" />
-            <LinkRow icon="card-outline" label="Méthodes de paiement" testID="acc-pay" />
-            <LinkRow icon="shield-checkmark-outline" label="Confidentialité" testID="acc-priv" />
+          <Section title={t("profile.account")}>
+            <LinkRow icon="person-outline" label={t("profile.accInfo")} testID="acc-info" />
+            <LinkRow icon="card-outline" label={t("profile.accPay")} testID="acc-pay" />
+            <LinkRow icon="shield-checkmark-outline" label={t("profile.accPriv")} testID="acc-priv" />
           </Section>
         </Animated.View>
 
         <Animated.View entering={FadeInDown.duration(360).delay(260)}>
-          <Section title="Support">
-            <LinkRow icon="help-circle-outline" label="Centre d'aide" testID="sup-help" />
-            <LinkRow icon="chatbubble-ellipses-outline" label="Nous contacter" testID="sup-contact" />
-            <LinkRow icon="star-outline" label="Noter Vendo" testID="sup-rate" />
+          <Section title={t("profile.support")}>
+            <LinkRow icon="help-circle-outline" label={t("profile.supHelp")} testID="sup-help" />
+            <LinkRow icon="chatbubble-ellipses-outline" label={t("profile.supContact")} testID="sup-contact" />
+            <LinkRow icon="star-outline" label={t("profile.supRate")} testID="sup-rate" />
             <LinkRow
               icon="play-circle-outline"
-              label="Revoir le tutoriel"
+              label={t("profile.replayOnboarding")}
               testID="sup-replay-onboarding"
               onPress={replayOnboarding}
             />
           </Section>
         </Animated.View>
 
-        <PressableScale style={styles.logout} hapticStyle="medium" testID="logout-btn">
-          <Text style={styles.logoutTxt}>Se déconnecter</Text>
+        <PressableScale style={styles.logout} hapticStyle="medium" testID="logout-btn" accessibilityLabel={t("profile.logout")}>
+          <Text style={styles.logoutTxt}>{t("profile.logout")}</Text>
         </PressableScale>
 
-        <Text style={styles.version}>Vendo · v1.0 · Beta</Text>
+        <Text style={styles.version}>{t("profile.version")}</Text>
       </ScrollView>
     </SafeAreaView>
   );
@@ -145,11 +174,12 @@ function ToggleRow({ icon, label, value, onChange, testID }: any) {
   );
 }
 
-function LinkRow({ icon, label, testID, onPress }: any) {
+function LinkRow({ icon, label, value, testID, onPress }: any) {
   return (
     <PressableScale style={styles.row} hapticStyle="selection" testID={testID} onPress={onPress} accessibilityRole="button" accessibilityLabel={label}>
       <View style={styles.rowIcon}><Ionicons name={icon} size={18} color={theme.color.text} /></View>
       <Text style={styles.rowLabel}>{label}</Text>
+      {value ? <Text style={styles.rowValue} numberOfLines={1}>{value}</Text> : null}
       <Ionicons name="chevron-forward" size={16} color={theme.color.textMuted} />
     </PressableScale>
   );
@@ -208,6 +238,7 @@ const styles = StyleSheet.create({
     alignItems: "center", justifyContent: "center",
   },
   rowLabel: { flex: 1, color: theme.color.text, fontSize: 15, fontFamily: theme.font.textMedium },
+  rowValue: { color: theme.color.textMuted, fontSize: 13, fontFamily: theme.font.text, maxWidth: 140 },
   logout: {
     marginHorizontal: 24, marginTop: 24, height: 54, borderRadius: 16,
     backgroundColor: theme.color.surface, borderWidth: 1, borderColor: theme.color.border,
