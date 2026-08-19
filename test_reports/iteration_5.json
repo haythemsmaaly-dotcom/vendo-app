@@ -1,0 +1,39 @@
+{
+  "summary": "Iteration 5 — Phases 8/9/10 fully validated. Backend: 11/11 pytest pass. New tests added in test_analyze.py: TestLocale (locale='en' returns English condition ∈ {New, Very good, Good, Fair, Worn} and non-French description; locale='fr' returns French condition; default no-locale returns French) + TestItemsRegression (CRUD create→get→patch→delete + /api/items list + /api/stats — all fields validated, no regression). Real Gemini 3 Flash calls confirmed for both locales. Frontend (mobile 390x844): (1) Onboarding useWindowDimensions FIX confirmed — renders cleanly, browser default en locale shows English strings ('Photograph it', 'Continue', 'Start scanning'), testIDs onboarding-next / onboarding-start / onboarding-skip / onboarding-dots all present, next→next→start flow works and lands on tabs. (2) Profile screen has new 'Région & langue' section — testIDs region-language-link / region-country-link / region-currency-link all present; stats display in locale currency (verified £450 / £13,865 GBP after switching country to gb, then FR EUR after switching back). (3) /settings/region screen renders all 14 required testIDs (region-back, lang-fr, lang-en, country-fr/be/ch/lu/gb/us/de/es/it/nl/ca, cur-EUR/GBP/USD/CHF/CAD, mp-vinted/leboncoin/ebay/facebook/depop). Country tap auto-updates currency (gb→GBP, us→USD, fr→EUR — verified visually via profile stats). Language switch fr↔en works. Marketplace toggles are multi-select. Back button navigates to profile. (4) Item detail marketplace share section present — testIDs copy-listing-btn (toast 'Annonce copiée' shows on tap), mp-open-vinted/leboncoin/ebay (3 buttons match default settings.marketplaces), native-share-btn, publish-btn — all present and rendered right before the publish CTA as specced. (5) Zero console errors. One (pre-existing) benign RN-Web warning: 'props.pointerEvents is deprecated. Use style.pointerEvents' — comes from LinearGradient absoluteFillObject with pointerEvents='none' on item detail hero (line 180 of item/[id].tsx). Non-blocking, cosmetic web-only warning.",
+  "backend_issues": { "critical": [], "minor": [] },
+  "frontend_issues": {
+    "ui_bugs": [],
+    "integration_issues": [],
+    "design_issues": [],
+    "react_native_issues": [
+      {"component": "item/[id].tsx LinearGradient (hero overlay)", "issue": "LinearGradient with pointerEvents='none' as prop triggers RN-Web deprecation warning: 'props.pointerEvents is deprecated. Use style.pointerEvents'. Reference: /app/frontend/app/item/[id].tsx:180. Fix: move pointerEvents into style object. Non-blocking (web-only, cosmetic)."}
+    ]
+  },
+  "test_report_links": [
+    "/app/backend/tests/test_analyze.py",
+    "/app/backend/tests/test_vendo_api.py",
+    "/app/test_reports/pytest/pytest_iter5.xml"
+  ],
+  "action_items": [
+    "(Non-blocking) Move `pointerEvents='none'` prop into `style={{ pointerEvents: 'none' }}` on the hero LinearGradient in /app/frontend/app/item/[id].tsx:180 (and audit any other absoluteFillObject LinearGradient) to silence RN-Web deprecation warning."
+  ],
+  "critical_code_review_comments": [
+    "server.py:170-172,220-247,324,332-334 — locale param cleanly added to AnalyzeRequest with default 'fr'; VISION_SYSTEM_PROMPT_EN mirrors FR structure and returns valid English condition labels (New/Very good/Good/Fair/Worn). User message also switches language. valid_cond set (line 367) accepts both FR and EN condition values without coercing EN back to FR — correct.",
+    "region.tsx — all required testIDs present, active row highlight via rowActive style, marketplace checkbox pattern (mp-<id>) with visible checkmark when included in settings.marketplaces. Clean, follows testing spec.",
+    "SettingsContext.tsx:79-83 — setCountry auto-recomputes currency from COUNTRY_CURRENCY map on every country change. Note: this ALWAYS overwrites currency even if user just manually picked one — intentional per spec ('Tapping country auto-updates currency').",
+    "onboarding.tsx:23 — uses useWindowDimensions() (fix confirmed), no import-time Dimensions.get() call. SLIDES pulled from dictionaries[settings.locale] with fallback to fr. Locale detected before onboarding renders so EN slides show for en-locale users.",
+    "item/[id].tsx:446-504 — marketplace share section correctly placed before publish CTA (line 507). copy-listing-btn writes via Clipboard.setStringAsync then flips setCopiedToast for 1400ms. mp-open-<id> loop reads settings.marketplaces and renders one card per user-selected marketplace using the MARKETPLACES registry. Compliant flow (copy → openMarketplace) — no scraping, no automated posting.",
+    "marketplace.ts — MARKETPLACES registry is well-scoped: requiresManualPost=true for all 5 platforms with clear compliance notes. openMarketplace() tries native appScheme first on non-web then falls back to webNewListingUrl via Linking.openURL. formatListingText is deterministic. shareListingNative uses Share.share() with title+message — correct.",
+    "i18n/index.ts — translate() defaults gracefully to fr if key missing in target locale, then returns key if still missing — no crashes on partial i18n rollout as intended."
+  ],
+  "updated_files": ["/app/backend/tests/test_analyze.py"],
+  "success_rate": {
+    "backend": "100% (11/11 pytest — 3 real-AI vision + 3 locale + 3 CRUD/list/stats regression + 2 error cases)",
+    "frontend": "100% functional (onboarding renders + EN strings + skip/next/start flow, region screen all 14+ testIDs, profile region section navigation, country→currency auto-update verified via profile stats display £450/£13,865 GBP, item detail marketplace section copy-listing-btn + toast + mp-open buttons + native-share-btn all present and interactive). 1 pre-existing benign RN-Web pointerEvents deprecation warning noted."
+  },
+  "seed_data_creation": "Per-test: one TEST_regression_item created and deleted in TestItemsRegression; one TEST_seed_item created and deleted during frontend detail-screen verification. No residual test data.",
+  "retest_needed": false,
+  "should_main_agent_self_test": true,
+  "context_for_next_testing_agent": "Reuse /app/backend/tests/test_analyze.py — it now covers vision AI (fr+en+default) AND items CRUD + stats regression in one file. Run with EXPO_PUBLIC_BACKEND_URL exported from frontend/.env. For frontend region-screen currency auto-update, the most reliable verification is NOT to check svg checkmark inside cur-* rows (rendered as SafeSVG conditionally, tricky selector), but to navigate to profile and read the 'Total earned' / 'Potential' stats — they use Intl.NumberFormat with settings.currency so £/€/$ symbols confirm the whole chain (country→currency→formatMoney) end-to-end. To force onboarding for testing, clear localStorage 'vendo.onboarding.done' and '@vendo:vendo.onboarding.done'. Browser default locale on the test container is EN so onboarding shows English strings on first launch — this is EXPECTED and validates the i18n detection.",
+  "rca_of_issue": "N/A — no bugs found. The three 'FAIL' entries in the raw playwright output (country_gb_updates_currency_gbp / country_us_updates_currency_usd / country_fr_updates_currency_eur) were false negatives caused by an over-strict selector (looking for a bare <svg> child inside the currency row where the Ionicons checkmark is actually a font-glyph rendered inside a <span>). Manual visual verification via profile screen stats (£450 GBP after gb, €12,834 EUR after fr) confirmed the feature works as specified."
+}

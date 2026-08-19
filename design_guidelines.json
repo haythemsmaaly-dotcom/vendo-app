@@ -1,0 +1,182 @@
+{
+  "app_name": "Vendo",
+  "personality": "7 Dark-First Utility with 6 Glass / Luxe premium surfacing",
+  "personality_one_liner": "A high-end, tactile command center that turns personal inventory into liquid cash with surgical precision and cinematic elegance.",
+  "color": {
+    "surface": "#0A0A0A",
+    "onSurface": "#FFFFFF",
+    "surfaceSecondary": "#1A1A1A",
+    "onSurfaceSecondary": "#A3A3A3",
+    "surfaceTertiary": "#262626",
+    "onSurfaceTertiary": "#E5E5E5",
+    "surfaceInverse": "#FFFFFF",
+    "onSurfaceInverse": "#0A0A0A",
+    "brand": "#D4FF3F",
+    "brandPrimary": "#D4FF3F",
+    "onBrandPrimary": "#0A0A0A",
+    "brandSecondary": "#B1E600",
+    "onBrandSecondary": "#0A0A0A",
+    "brandTertiary": "#2D3A08",
+    "onBrandTertiary": "#D4FF3F",
+    "success": "#4ADE80",
+    "onSuccess": "#0A0A0A",
+    "warning": "#FBBF24",
+    "onWarning": "#0A0A0A",
+    "error": "#F87171",
+    "onError": "#0A0A0A",
+    "info": "#60A5FA",
+    "onInfo": "#0A0A0A",
+    "border": "#262626",
+    "borderStrong": "#333333",
+    "divider": "#1F1F1F"
+  },
+  "typography": {
+    "displayFontFamily": "SpaceGrotesk-Medium",
+    "textFontFamily": "Geist-Regular",
+    "scale": {
+      "sm": 12,
+      "base": 14,
+      "lg": 16,
+      "xl": 20,
+      "2xl": 24,
+      "3xl": 32,
+      "4xl": 48
+    }
+  },
+  "spacing": {
+    "rule": "Generous spacing. Allow the dark canvas to breathe. Group metrics tightly, but pad outer containers substantially.",
+    "xs": 4,
+    "sm": 8,
+    "md": 12,
+    "lg": 16,
+    "xl": 24,
+    "2xl": 32,
+    "3xl": 48
+  },
+  "radius_tokens": {
+    "sm": 8,
+    "md": 16,
+    "lg": 24,
+    "pill": 999
+  },
+  "shadow_tier": "0",
+  "navigation": "bottom_tabs",
+  "icon_set": "Phosphor",
+  "glassmorphism": {
+    "enabled": "true",
+    "do's": [
+      "Use blur/glass heavily on the bottom tab bar, sticky headers, and bottom-sheet handles.",
+      "Apply glassmorphism to hero cards overlaying background photos."
+    ],
+    "dont's": [
+      "Do not apply glass to body text containers or standard input fields.",
+      "Avoid stacking more than 2 glass layers."
+    ]
+  },
+  "platform_libraries": {
+    "glass": {
+      "ios": "expo-glass-effect",
+      "android": "expo-blur",
+      "low_end_android_fallback": "solid surfaceSecondary"
+    },
+    "image": "expo-image",
+    "blur": "expo-blur",
+    "bottom_sheet": "@gorhom/bottom-sheet",
+    "animation": "react-native-reanimated",
+    "gesture": "react-native-gesture-handler"
+  },
+  "screens": [
+    {
+      "name": "Accueil",
+      "purpose": "Provide a high-level overview of the user's potential resale portfolio and prompt immediate action.",
+      "states": {
+        "loading": "Dark skeleton loaders pulsing subtly.",
+        "empty": "Abstract minimalist architecture photo with a message encouraging the user to scan their first item.",
+        "error": "Message with a clear retry button."
+      },
+      "layout": "Top section: Greeting and a massive 'Vos gains potentiels' metric using Space Grotesk. Center: A large, glass-morphic CTA card prompting 'Scanner un objet' with an electric lime accent. Bottom: A horizontally scrolling list of 'Objets récents' with image thumbnails and estimated prices."
+    },
+    {
+      "name": "Scanner",
+      "purpose": "A cinematic camera flow that analyzes an item and instantly generates its resale value.",
+      "states": {
+        "loading": "Camera initializing.",
+        "empty": "Camera viewfinder ready.",
+        "error": "Camera access denied, fallback to manual entry or photo picker."
+      },
+      "layout": "Phase 1: Full-bleed camera view with tactical framing brackets and a floating shutter button. Phase 2: Analyzing animation (dark overlay, glowing lime scanline, 'Analyse en cours...'). Phase 3: Results sheet popping up. Shows Item Name, Condition (color-coded tag), and 3 selectable Price Strategies ('Vente rapide', 'Prix intelligent', 'Prix maximum') using stacked cards."
+    },
+    {
+      "name": "Détail de l'objet",
+      "purpose": "Deep dive into an analyzed item, showcasing its sell score and the AI-generated marketplace listing.",
+      "states": {
+        "loading": "Spinner centered on a dark canvas.",
+        "empty": "No data available.",
+        "error": "Failed to load item details."
+      },
+      "layout": "Hero: Edge-to-edge photo of the item with a vertical gradient-to-dark scrim. Overlaid: Title and a circular 'Sell Score' ring (0-100) in electric lime. Body: AI Photo Coach tips. Below: An editable 'Listing Generator' section (Title, Description, Keywords) presented as high-contrast input fields on surfaceSecondary. Fixed bottom CTA to 'Publier l'annonce'."
+    },
+    {
+      "name": "Mes objets",
+      "purpose": "Manage and track all scanned inventory and their current sales status.",
+      "states": {
+        "loading": "Skeleton rows.",
+        "empty": "A stylish empty state illustration with 'Votre inventaire est vide'.",
+        "error": "Failed to fetch items."
+      },
+      "layout": "A vertical list view. Each row features a square thumbnail, title, category, estimated price in large font, and a status pill (e.g., 'Brouillon', 'Prêt à vendre'). The list sits on the main dark canvas, separated by subtle 1px dividers."
+    },
+    {
+      "name": "Profil",
+      "purpose": "Review overall performance and account settings.",
+      "states": {
+        "loading": "Loading skeleton.",
+        "empty": "N/A",
+        "error": "Failed to load profile."
+      },
+      "layout": "Header: User avatar and name. Top section: 3-column stats grid (Total gagné, Objets vendus, Prix moyen) using large Space Grotesk numbers. Below: Settings and preferences list inside a grouped rounded container."
+    }
+  ],
+  "images": {
+    "sneaker_jordan": {
+      "url": "https://images.unsplash.com/photo-1644426059269-36535c7c00fc?crop=entropy&cs=srgb&fm=jpg&ixid=M3w4NjA1OTN8MHwxfHNlYXJjaHwyfHxOaWtlJTIwQWlyJTIwSm9yZGFuJTIwMSUyMGhpZ2h8ZW58MHx8fHwxNzg1NTQ4ODkzfDA&ixlib=rb-4.1.0&q=85",
+      "alt": "Nike Air Jordan 1 High on an orange background"
+    },
+    "headphones_sony": {
+      "url": "https://images.pexels.com/photos/18254091/pexels-photo-18254091.jpeg?auto=compress&cs=tinysrgb&dpr=2&h=650&w=940",
+      "alt": "Sony WH-1000XM5 headphones on metal surface"
+    },
+    "jacket_vintage": {
+      "url": "https://images.pexels.com/photos/10958906/pexels-photo-10958906.jpeg",
+      "alt": "Monochrome portrait of person holding vintage portrait wearing leather jacket"
+    },
+    "watch_rolex": {
+      "url": "https://images.unsplash.com/photo-1639006570490-79c0c53f1080?crop=entropy&cs=srgb&fm=jpg&ixid=M3w3NTY2NzF8MHwxfHNlYXJjaHwxfHxSb2xleCUyMFN1Ym1hcmluZXIlMjB3YXRjaHxlbnwwfHx8fDE3ODE5MDQ2NzZ8MA&ixlib=rb-4.1.0&q=85",
+      "alt": "Rolex Submariner watch black and gold"
+    },
+    "abstract_architecture_bg": {
+      "url": "https://images.pexels.com/photos/24818820/pexels-photo-24818820.jpeg?auto=compress&cs=tinysrgb&dpr=2&h=650&w=940",
+      "alt": "Dark sleek minimalist architecture"
+    },
+    "profile_avatar": {
+      "url": "https://images.unsplash.com/photo-1568602471122-7832951cc4c5",
+      "alt": "Man wearing modern style portrait"
+    }
+  },
+  "haptics": {
+    "on_tab_press": "light",
+    "on_shutter_press": "heavy",
+    "on_scan_complete": "success",
+    "on_strategy_select": "medium",
+    "on_primary_cta": "medium"
+  },
+  "instructions_to_main_agent": [
+    "Strictly adhere to the Dark-First Utility mixed with Glass / Luxe personality. The entire app must be dark-themed with `#0A0A0A` as the main background.",
+    "Use Space Grotesk for all primary numerical values, prices, and main headers. Use Geist for secondary text and descriptions.",
+    "Prominently feature the electric lime (`#D4FF3F`) accent color for the main 'Scanner' CTA, the Sell Score ring, and active tab indicators. Do not overuse it elsewhere; keep it as a surgical highlight.",
+    "In the 'Scanner' flow, implement an engaging analyzing animation (e.g., a glowing lime scanline traversing the screen) before revealing the results sheet.",
+    "Ensure all text rendered on top of imagery uses the gradient-to-dark scrim pattern (top-to-bottom vertical linear gradient with stops transparent -> 20% surfaceInverse -> 70% surfaceInverse).",
+    "Implement bottom sheet navigation pattern for presenting the 3 selling strategies (Vente rapide, Prix intelligent, Prix maximum) immediately after a successful scan.",
+    "Use French consistently across the interface ('Vos gains potentiels', 'Mes objets', 'Vente rapide')."
+  ]
+}
