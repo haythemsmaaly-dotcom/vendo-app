@@ -31,3 +31,22 @@ Real AI vision, marketplace integrations, payments, chat, social feed, authentic
 - **Sell Score gating:** Suggest "Vendo Pro" (paid) for score booster (rewrite listing, price re-analysis, market-heat reports).
 - **Marketplace publishing:** Deep-link into Vinted / Leboncoin / eBay with clipboard-filled listing.
 - **Success revenue share:** Optional 1–2% fee when Vendo tracks a completed sale from a Vendo-prepared listing.
+
+
+## V1.1 — Current implemented state (post-continuation)
+The app has moved well beyond the original V1 mock. Now delivered & verified:
+- **Real AI vision:** `/api/analyze` uses Gemini via the Emergent LLM key (not mocked). Returns name/brand/model/category/condition + reasons, confidence, market range, keywords, description (FR/EN by locale).
+- **Authentication:** email/password with bcrypt + JWT (30-day). Persistent `AUTH_SECRET` in env (required in production). Session persists across reloads via cross-platform secure storage wrapper (Keychain on native, AsyncStorage on web).
+- **Marketplace (compliant):** publish/unpublish/mark-sold, public feed, favorites, buyer→seller messages/inbox, reports. Share = copy listing + open marketplace web form (no auto-posting/scraping).
+- **i18n:** FR + EN dictionaries; `t()` plumbed across Home / My Items / Scan / Item detail / Profile / Onboarding / Region. Language switch is live.
+- **Currency:** configurable per user (EUR/GBP/USD/CHF/CAD). `formatMoney()` converts stored EUR amounts via a static rate table + Intl formatting.
+- **Image storage:** base64 in dev; Cloudinary integration coded server-side (`/api/uploads/photos`), pending credentials to enable persistent HTTPS URLs for marketplace photos.
+
+## Testing status (this cycle)
+- Backend regression: 48/48 passed (auth, items+ownership, marketplace, favorites, messages, reports, uploads, AI vision, stats).
+- Frontend regression: all critical flows passed on web (boot/no-blank-screen, session persistence, i18n FR↔EN, currency switching, scan→analyze→detail, filters, logout).
+
+## Known non-blockers / later enhancements
+- Real market pricing (eBay/SerpAPI) intentionally deferred — market range stays an AI estimate labeled as such.
+- Item-detail price EDIT input edits the underlying EUR base value (display is converted).
+- NL/DE/ES/IT translations not shipped (only FR/EN).

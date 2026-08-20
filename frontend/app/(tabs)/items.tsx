@@ -8,22 +8,18 @@ import { Ionicons } from "@expo/vector-icons";
 import { useRouter, useFocusEffect } from "expo-router";
 import Animated, { FadeInDown } from "react-native-reanimated";
 
-import { theme, formatEUR, statusLabel, statusColor, conditionColor } from "@/src/theme";
+import { theme, statusColor, conditionColor } from "@/src/theme";
 import { api, Item } from "@/src/api";
+import { useSettings } from "@/src/i18n/SettingsContext";
 import PressableScale from "@/src/components/PressableScale";
 import Skeleton from "@/src/components/Skeleton";
 import EmptyState from "@/src/components/EmptyState";
 
-const FILTERS = [
-  { key: "all", label: "Tout" },
-  { key: "draft", label: "Brouillons" },
-  { key: "ready", label: "Prêts" },
-  { key: "listed", label: "En vente" },
-  { key: "sold", label: "Vendus" },
-];
+const FILTER_KEYS = ["all", "draft", "ready", "listed", "sold"] as const;
 
 export default function ItemsScreen() {
   const router = useRouter();
+  const { t, formatMoney } = useSettings();
   const [items, setItems] = useState<Item[] | null>(null);
   const [filter, setFilter] = useState("all");
   const [refreshing, setRefreshing] = useState(false);
@@ -47,9 +43,9 @@ export default function ItemsScreen() {
     <SafeAreaView style={styles.safe} edges={["top"]}>
       <Animated.View entering={FadeInDown.duration(320)} style={styles.header}>
         <View>
-          <Text style={styles.h1}>Mes objets</Text>
+          <Text style={styles.h1}>{t("items.title")}</Text>
           <Text style={styles.sub}>
-            {loading ? "Chargement…" : `${items!.length} objet${items!.length > 1 ? "s" : ""} au total`}
+            {loading ? t("items.loading") : t(items!.length === 1 ? "items.total" : "items.totalPlural", { count: items!.length })}
           </Text>
         </View>
         <PressableScale
@@ -68,17 +64,17 @@ export default function ItemsScreen() {
           showsHorizontalScrollIndicator={false}
           contentContainerStyle={styles.chipRow}
         >
-          {FILTERS.map(f => {
-            const active = filter === f.key;
+          {FILTER_KEYS.map(key => {
+            const active = filter === key;
             return (
               <PressableScale
-                key={f.key}
-                testID={`filter-chip-${f.key}`}
+                key={key}
+                testID={`filter-chip-${key}`}
                 hapticStyle="selection"
-                onPress={() => setFilter(f.key)}
+                onPress={() => setFilter(key)}
                 style={[styles.chip, active && styles.chipActive]}
               >
-                <Text style={[styles.chipTxt, active && styles.chipTxtActive]}>{f.label}</Text>
+                <Text style={[styles.chipTxt, active && styles.chipTxtActive]}>{t(`items.filters.${key}`)}</Text>
               </PressableScale>
             );
           })}
@@ -110,9 +106,9 @@ export default function ItemsScreen() {
             <EmptyState
               testID="items-empty"
               icon="cube-outline"
-              title={filter === "sold" ? "Aucune vente encore" : "Aucun objet ici"}
-              subtitle={filter === "sold" ? "Publiez vos annonces pour commencer." : "Le premier scan est le plus excitant."}
-              ctaLabel="Scanner un objet"
+              title={filter === "sold" ? t("items.emptySoldTitle") : t("items.emptyTitle")}
+              subtitle={filter === "sold" ? t("items.emptySoldSub") : t("items.emptySub")}
+              ctaLabel={t("home.scanTitle")}
               onCta={() => router.push("/(tabs)/scan")}
             />
           )}
@@ -128,7 +124,7 @@ export default function ItemsScreen() {
                 <View style={{ flex: 1, gap: 4 }}>
                   <View style={styles.rowTop}>
                     <Text style={styles.name} numberOfLines={1}>{item.name}</Text>
-                    <Text style={styles.price}>{formatEUR(item.listing.price)}</Text>
+                    <Text style={styles.price}>{formatMoney(item.listing.price)}</Text>
                   </View>
                   <Text style={styles.cat} numberOfLines={1}>
                     {item.brand ? `${item.brand} · ` : ""}{item.category}
@@ -140,7 +136,7 @@ export default function ItemsScreen() {
                     </View>
                     <View style={[styles.pill, { borderColor: statusColor(item.status) }]}>
                       <Text style={[styles.pillTxt, { color: statusColor(item.status) }]}>
-                        {statusLabel(item.status)}
+                        {t(`status.${item.status}`)}
                       </Text>
                     </View>
                     <View style={styles.scoreMini}>

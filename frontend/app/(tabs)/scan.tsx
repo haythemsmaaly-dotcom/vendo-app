@@ -13,34 +13,28 @@ import Animated, {
   useSharedValue, useAnimatedStyle, withRepeat, withTiming, withSequence, Easing, FadeIn, FadeInDown, FadeOut,
 } from "react-native-reanimated";
 
-import { theme, formatEUR, conditionColor } from "@/src/theme";
+import { theme, conditionColor } from "@/src/theme";
 import { api, Item, AnalyzedItem } from "@/src/api";
 import { CATALOG, pickRandom, computePriceStrategies, computeSellPlan, computeSellScore } from "@/src/catalog";
 import { useSettings } from "@/src/i18n/SettingsContext";
+import { dictionaries } from "@/src/i18n";
 import { useAuth } from "@/src/auth";
 import PressableScale from "@/src/components/PressableScale";
 import SellScoreRing from "@/src/components/SellScoreRing";
 
 type Phase = "idle" | "preview" | "analyzing" | "results" | "error";
 
-const PROGRESS_STEPS = [
-  "Je regarde vos photos…",
-  "J'identifie le produit…",
-  "J'évalue l'état visible…",
-  "Je peaufine votre annonce…",
-  "Je calcule votre Sell Score…",
-];
-
 export default function ScanScreen() {
   const router = useRouter();
-  const { settings } = useSettings();
+  const { settings, t, formatMoney } = useSettings();
   const { user } = useAuth();
+  const PROGRESS_STEPS = (dictionaries[settings.locale]?.scan?.steps || dictionaries.fr.scan.steps) as unknown as string[];
   const [phase, setPhase] = useState<Phase>("idle");
   const [photos, setPhotos] = useState<string[]>([]);
   const [progress, setProgress] = useState(0);
   const [stepIdx, setStepIdx] = useState(0);
   const [error, setError] = useState<string | null>(null);
-  const [errorTitle, setErrorTitle] = useState<string>("Analyse impossible");
+  const [errorTitle, setErrorTitle] = useState<string>("");
   const [previewItem, setPreviewItem] = useState<Item | null>(null);
   const createdIdRef = useRef<string | null>(null);
 
@@ -72,7 +66,7 @@ export default function ScanScreen() {
   const pickFromCamera = async () => {
     const perm = await ImagePicker.requestCameraPermissionsAsync();
     if (!perm.granted) {
-      setError("Permission caméra refusée. Utilisez la galerie.");
+      setError(t("scan.permCamera"));
       return;
     }
     const res = await ImagePicker.launchCameraAsync({
@@ -88,7 +82,7 @@ export default function ScanScreen() {
 
   const pickFromLibrary = async () => {
     const perm = await ImagePicker.requestMediaLibraryPermissionsAsync();
-    if (!perm.granted) { setError("Permission galerie refusée."); return; }
+    if (!perm.granted) { setError(t("scan.permGallery")); return; }
     const res = await ImagePicker.launchImageLibraryAsync({
       quality: 0.7, base64: true, allowsMultipleSelection: true, selectionLimit: 3,
     });
@@ -238,14 +232,14 @@ export default function ScanScreen() {
       try { Haptics.notificationAsync(Haptics.NotificationFeedbackType.Error); } catch {}
       const msg = String(e?.message || "");
       if (msg.includes("400")) {
-        setErrorTitle("Photo invalide");
-        setError("Les photos n'ont pas pu être lues. Essayez avec des images plus nettes (JPEG ou PNG).");
+        setErrorTitle(t("scan.errorTitle.invalid"));
+        setError(t("scan.errorBody.invalid"));
       } else if (msg.includes("502") || msg.includes("Vision")) {
-        setErrorTitle("Objet non reconnu");
-        setError("Vendo n'a pas réussi à identifier cet objet. Prenez des photos plus proches et bien éclairées, puis réessayez.");
+        setErrorTitle(t("scan.errorTitle.unknown"));
+        setError(t("scan.errorBody.unknown"));
       } else {
-        setErrorTitle("Analyse impossible");
-        setError("Une erreur est survenue pendant l'analyse. Vérifiez votre connexion et réessayez.");
+        setErrorTitle(t("scan.errorTitle.generic"));
+        setError(t("scan.errorBody.generic"));
       }
       setPhase("error");
     }
@@ -288,20 +282,20 @@ export default function ScanScreen() {
           <Ionicons name={phase === "idle" ? "close" : "arrow-back"} size={22} color={theme.color.text} />
         </PressableScale>
         <Text style={styles.headerTitle}>
-          {phase === "idle" ? "Scanner"
-            : phase === "preview" ? "Aperçu"
-            : phase === "analyzing" ? "Analyse"
-            : phase === "error" ? "Erreur"
-            : "Résultat"}
+          {phase === "idle" ? t("scan.header.idle")
+            : phase === "preview" ? t("scan.header.preview")
+            : phase === "analyzing" ? t("scan.header.analyzing")
+            : phase === "error" ? t("scan.header.error")
+            : t("scan.header.results")}
         </Text>
         <View style={{ width: 40 }} />
       </View>
 
       {phase === "idle" && (
         <ScrollView contentContainerStyle={{ padding: 24, paddingBottom: 140 }} showsVerticalScrollIndicator={false}>
-          <Animated.Text entering={FadeInDown.duration(360)} style={styles.h1}>Que voulez-vous vendre ?</Animated.Text>
+          <Animated.Text entering={FadeInDown.duration(360)} style={styles.h1}>{t("scan.title")}</Animated.Text>
           <Animated.Text entering={FadeInDown.duration(360).delay(60)} style={styles.subtle}>
-            Prenez 1 à 3 photos claires. Vendo identifie l{"\u2019"}objet et prépare votre annonce en quelques secondes.
+            {t("scan.intro")}
           </Animated.Text>
 
           <Animated.View entering={FadeInDown.duration(420).delay(120)}>
@@ -310,7 +304,7 @@ export default function ScanScreen() {
                 testID="scan-camera-btn"
                 hapticStyle="heavy"
                 accessibilityRole="button"
-                accessibilityLabel="Prendre une photo"
+                accessibilityLabel={t("scan.camera")}
                 onPress={pickFromCamera}
                 style={styles.bigCta}
               >
@@ -319,8 +313,8 @@ export default function ScanScreen() {
                   style={StyleSheet.absoluteFillObject as any}
                 />
                 <Ionicons name="camera" size={38} color={theme.color.onLime} />
-                <Text style={styles.bigCtaTitle}>Prendre une photo</Text>
-                <Text style={styles.bigCtaSub}>Ouverture de la caméra</Text>
+                <Text style={styles.bigCtaTitle}>{t("scan.camera")}</Text>
+                <Text style={styles.bigCtaSub}>{t("scan.cameraSub")}</Text>
               </PressableScale>
             </Animated.View>
           </Animated.View>
@@ -328,24 +322,24 @@ export default function ScanScreen() {
           <Animated.View entering={FadeInDown.duration(360).delay(180)}>
             <PressableScale testID="scan-library-btn" hapticStyle="selection" onPress={pickFromLibrary} style={styles.altCta}>
               <Ionicons name="images" size={22} color={theme.color.text} />
-              <Text style={styles.altCtaTxt}>Depuis la galerie</Text>
+              <Text style={styles.altCtaTxt}>{t("scan.library")}</Text>
             </PressableScale>
           </Animated.View>
 
           <Animated.View entering={FadeInDown.duration(360).delay(240)}>
             <PressableScale testID="scan-sample-btn" hapticStyle="selection" onPress={useSampleImage} style={[styles.altCta, { marginTop: 10 }]}>
               <Ionicons name="sparkles" size={22} color={theme.color.lime} />
-              <Text style={styles.altCtaTxt}>Essayer avec un objet d{"\u2019"}exemple</Text>
+              <Text style={styles.altCtaTxt}>{t("scan.sample")}</Text>
             </PressableScale>
           </Animated.View>
 
           {error && <Text style={styles.error}>{error}</Text>}
 
           <Animated.View entering={FadeIn.duration(500).delay(300)} style={styles.tips}>
-            <Text style={styles.tipsTitle}>Astuces pour un meilleur résultat</Text>
-            <TipRow icon="sunny-outline" txt="Bonne lumière naturelle" />
-            <TipRow icon="crop-outline" txt="Cadrez l'objet entier" />
-            <TipRow icon="eye-outline" txt="Montrez les défauts éventuels" />
+            <Text style={styles.tipsTitle}>{t("scan.tipsTitle")}</Text>
+            <TipRow icon="sunny-outline" txt={t("scan.tipLight")} />
+            <TipRow icon="crop-outline" txt={t("scan.tipFrame")} />
+            <TipRow icon="eye-outline" txt={t("scan.tipDefects")} />
           </Animated.View>
         </ScrollView>
       )}
@@ -381,14 +375,14 @@ export default function ScanScreen() {
                 style={[styles.previewCell, styles.addCell]}
               >
                 <Ionicons name="add" size={32} color={theme.color.textMuted} />
-                <Text style={styles.addTxt}>Ajouter</Text>
+                <Text style={styles.addTxt}>{t("scan.add")}</Text>
               </PressableScale>
             )}
           </Animated.View>
 
           <Animated.View entering={FadeInDown.duration(360).delay(80)} style={{ marginTop: 24 }}>
-            <Text style={styles.h2}>Prêt à analyser ?</Text>
-            <Text style={styles.subtle}>Vendo va identifier l{"\u2019"}objet et générer une annonce complète.</Text>
+            <Text style={styles.h2}>{t("scan.previewTitle")}</Text>
+            <Text style={styles.subtle}>{t("scan.previewSub")}</Text>
           </Animated.View>
 
           <PressableScale
@@ -397,7 +391,7 @@ export default function ScanScreen() {
             onPress={startAnalysis}
             style={styles.primaryBtn}
           >
-            <Text style={styles.primaryBtnTxt}>Analyser avec l{"\u2019"}IA</Text>
+            <Text style={styles.primaryBtnTxt}>{t("scan.analyzeCta")}</Text>
             <Ionicons name="sparkles" size={18} color={theme.color.onLime} />
           </PressableScale>
         </ScrollView>
@@ -455,7 +449,7 @@ export default function ScanScreen() {
             style={styles.primaryBtn}
           >
             <Ionicons name="refresh" size={18} color={theme.color.onLime} />
-            <Text style={styles.primaryBtnTxt}>Réessayer</Text>
+            <Text style={styles.primaryBtnTxt}>{t("common.retry")}</Text>
           </PressableScale>
           <PressableScale
             testID="error-back-btn"
@@ -463,7 +457,7 @@ export default function ScanScreen() {
             onPress={reset}
             style={[styles.altCta, { marginTop: 12 }]}
           >
-            <Text style={styles.altCtaTxt}>Reprendre depuis le début</Text>
+            <Text style={styles.altCtaTxt}>{t("scan.resetBtn")}</Text>
           </PressableScale>
         </Animated.View>
       )}
@@ -507,10 +501,10 @@ export default function ScanScreen() {
                 <SellScoreRing score={previewItem.sell_score} size={110} delay={500} />
               </View>
               <View style={styles.resultPriceBlock}>
-                <Text style={styles.resultPriceLabel}>Prix recommandé</Text>
-                <Text style={styles.resultPriceValue}>{formatEUR(previewItem.listing.price)}</Text>
+                <Text style={styles.resultPriceLabel}>{t("detail.recommendedPrice")}</Text>
+                <Text style={styles.resultPriceValue}>{formatMoney(previewItem.listing.price)}</Text>
                 <Text style={styles.resultRange}>
-                  Estimé par l{"\u2019"}IA : {formatEUR(previewItem.market_low)} – {formatEUR(previewItem.market_high)}
+                  {t("detail.marketRange", { low: formatMoney(previewItem.market_low), high: formatMoney(previewItem.market_high) })}
                 </Text>
               </View>
             </Animated.View>
@@ -522,7 +516,7 @@ export default function ScanScreen() {
                 onPress={openResult}
                 style={styles.primaryBtn}
               >
-                <Text style={styles.primaryBtnTxt}>Voir le détail complet</Text>
+                <Text style={styles.primaryBtnTxt}>{t("common.seeDetail")}</Text>
                 <Ionicons name="arrow-forward" size={18} color={theme.color.onLime} />
               </PressableScale>
               <PressableScale
@@ -531,7 +525,7 @@ export default function ScanScreen() {
                 onPress={reset}
                 style={[styles.altCta, { marginTop: 12 }]}
               >
-                <Text style={styles.altCtaTxt}>Scanner un autre objet</Text>
+                <Text style={styles.altCtaTxt}>{t("common.scanAnother")}</Text>
               </PressableScale>
             </Animated.View>
           </View>

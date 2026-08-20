@@ -21,6 +21,14 @@ const COUNTRY_CURRENCY: Record<CountryCode, CurrencyCode> = {
   gb: "GBP", us: "USD", de: "EUR", es: "EUR", it: "EUR", nl: "EUR",
 };
 
+// Static EUR-based conversion rates. Item prices are stored/estimated in EUR by the
+// AI; these let us DISPLAY them consistently in the user's chosen currency without a
+// live FX dependency. Approximate — fine for a resale price estimate. Swap for a live
+// rates API later if precise conversion is required.
+const EUR_RATES: Record<CurrencyCode, number> = {
+  EUR: 1, GBP: 0.85, USD: 1.08, CHF: 0.95, CAD: 1.47,
+};
+
 function detectDefaults(): Settings {
   // Best-effort detection from device locale, not from IP.
   let locale: Locale = "fr";
@@ -97,14 +105,17 @@ export function SettingsProvider({ children }: { children: React.ReactNode }) {
 
   const formatMoney = useCallback((n: number) => {
     const localeTag = settings.locale === "en" ? "en-GB" : "fr-FR";
+    // Stored amounts are in EUR — convert to the user's currency before display.
+    const rate = EUR_RATES[settings.currency] ?? 1;
+    const converted = (Number(n) || 0) * rate;
     try {
       return new Intl.NumberFormat(localeTag, {
         style: "currency",
         currency: settings.currency,
         maximumFractionDigits: 0,
-      }).format(Math.round(n));
+      }).format(Math.round(converted));
     } catch {
-      return `${Math.round(n)} ${settings.currency}`;
+      return `${Math.round(converted)} ${settings.currency}`;
     }
   }, [settings.locale, settings.currency]);
 

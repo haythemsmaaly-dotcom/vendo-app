@@ -85,6 +85,9 @@ export const fr = {
       generic: "Une erreur est survenue pendant l'analyse. Vérifiez votre connexion et réessayez.",
     },
     resetBtn: "Reprendre depuis le début",
+    header: { idle: "Scanner", preview: "Aperçu", analyzing: "Analyse", error: "Erreur", results: "Résultat" },
+    permCamera: "Permission caméra refusée. Utilisez la galerie.",
+    permGallery: "Permission galerie refusée.",
   },
   detail: {
     sellScore: "Sell Score",

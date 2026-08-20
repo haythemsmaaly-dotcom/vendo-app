@@ -9,8 +9,10 @@ import { Ionicons } from "@expo/vector-icons";
 import { useRouter, useFocusEffect } from "expo-router";
 import Animated, { FadeInDown, FadeIn } from "react-native-reanimated";
 
-import { theme, formatEUR, conditionColor } from "@/src/theme";
+import { theme, conditionColor } from "@/src/theme";
 import { api, Item } from "@/src/api";
+import { useSettings } from "@/src/i18n/SettingsContext";
+import { useAuth } from "@/src/auth";
 import PressableScale from "@/src/components/PressableScale";
 import AnimatedNumber from "@/src/components/AnimatedNumber";
 import Skeleton from "@/src/components/Skeleton";
@@ -18,6 +20,8 @@ import EmptyState from "@/src/components/EmptyState";
 
 export default function HomeScreen() {
   const router = useRouter();
+  const { t, formatMoney } = useSettings();
+  const { user } = useAuth();
   const [items, setItems] = useState<Item[] | null>(null);
   const [stats, setStats] = useState<{ total_potential: number; items_sold: number; total_earned: number } | null>(null);
   const [refreshing, setRefreshing] = useState(false);
@@ -38,7 +42,9 @@ export default function HomeScreen() {
   const recent = (items || []).slice(0, 6);
 
   const hour = new Date().getHours();
-  const greeting = hour < 6 ? "Bonne nuit" : hour < 12 ? "Bonjour" : hour < 18 ? "Bon après-midi" : "Bonsoir";
+  const greeting = hour < 6 ? t("greeting.night") : hour < 12 ? t("greeting.morning") : hour < 18 ? t("greeting.afternoon") : t("greeting.evening");
+  const displayName = user?.display_name?.trim() || "Vendo";
+  const avatarLetter = displayName.charAt(0).toUpperCase();
 
   const onRefresh = async () => {
     setRefreshing(true);
@@ -57,20 +63,20 @@ export default function HomeScreen() {
         <Animated.View entering={FadeInDown.duration(360)} style={styles.header} testID="home-header">
           <View>
             <Text style={styles.greeting}>{greeting},</Text>
-            <Text style={styles.name}>Alex</Text>
+            <Text style={styles.name}>{displayName}</Text>
           </View>
           <PressableScale
             style={styles.avatar}
             onPress={() => router.push("/(tabs)/profile")}
             hapticStyle="selection"
           >
-            <Text style={styles.avatarText}>A</Text>
+            <Text style={styles.avatarText}>{avatarLetter}</Text>
           </PressableScale>
         </Animated.View>
 
         {/* Hero potential cash */}
         <Animated.View entering={FadeInDown.duration(420).delay(60)} style={styles.hero} testID="potential-hero">
-          <Text style={styles.heroLabel}>Vos gains potentiels</Text>
+          <Text style={styles.heroLabel}>{t("home.potentialCash")}</Text>
           {loading ? (
             <View style={{ marginTop: 8, marginBottom: 14 }}>
               <Skeleton width={220} height={56} radius={12} />
@@ -79,7 +85,7 @@ export default function HomeScreen() {
             <AnimatedNumber
               value={stats?.total_potential ?? 0}
               duration={1100}
-              format={(n) => formatEUR(n)}
+              format={(n) => formatMoney(n)}
               style={styles.heroAmount as any}
               testID="potential-amount"
             />
@@ -87,12 +93,12 @@ export default function HomeScreen() {
           <View style={styles.heroRow}>
             <View style={styles.heroPill}>
               <Ionicons name="cube-outline" size={13} color={theme.color.textMuted} />
-              <Text style={styles.heroPillTxt}>{items?.length ?? 0} objets</Text>
+              <Text style={styles.heroPillTxt}>{t((items?.length ?? 0) === 1 ? "home.itemsCount" : "home.itemsCountPlural", { count: items?.length ?? 0 })}</Text>
             </View>
             <View style={styles.heroPill}>
               <Ionicons name="trending-up" size={13} color={theme.color.lime} />
               <Text style={[styles.heroPillTxt, { color: theme.color.lime }]}>
-                +{formatEUR(stats?.total_earned ?? 0)} gagnés
+                {t("home.earned", { amount: formatMoney(stats?.total_earned ?? 0) })}
               </Text>
             </View>
           </View>
@@ -104,7 +110,7 @@ export default function HomeScreen() {
             testID="scan-primary-cta"
             hapticStyle="medium"
             accessibilityRole="button"
-            accessibilityLabel="Scanner un objet"
+            accessibilityLabel={t("home.scanTitle")}
             onPress={() => router.push("/(tabs)/scan")}
             style={styles.primaryCta}
           >
@@ -118,8 +124,8 @@ export default function HomeScreen() {
                 <Ionicons name="scan" size={26} color={theme.color.onLime} />
               </View>
               <View style={{ flex: 1 }}>
-                <Text style={styles.ctaTitle}>Scanner un objet</Text>
-                <Text style={styles.ctaSub}>Prenez une photo, on s{"\u2019"}occupe du reste</Text>
+                <Text style={styles.ctaTitle}>{t("home.scanTitle")}</Text>
+                <Text style={styles.ctaSub}>{t("home.scanSub")}</Text>
               </View>
               <Ionicons name="arrow-forward" size={22} color={theme.color.onLime} />
             </View>
@@ -135,8 +141,8 @@ export default function HomeScreen() {
           >
             <Ionicons name="search" size={20} color={theme.color.text} />
             <View style={{ flex: 1 }}>
-              <Text style={styles.secondaryTitle}>Trouver des objets à vendre</Text>
-              <Text style={styles.secondarySub}>Inspecter votre placard, cave, garage</Text>
+              <Text style={styles.secondaryTitle}>{t("home.findTitle")}</Text>
+              <Text style={styles.secondarySub}>{t("home.findSub")}</Text>
             </View>
             <Ionicons name="chevron-forward" size={18} color={theme.color.textMuted} />
           </PressableScale>
@@ -155,7 +161,7 @@ export default function HomeScreen() {
         {!loading && attention.length > 0 && (
           <Animated.View entering={FadeIn.duration(360).delay(240)} style={styles.section} testID="attention-section">
             <View style={styles.sectionHead}>
-              <Text style={styles.sectionTitle}>À optimiser</Text>
+              <Text style={styles.sectionTitle}>{t("home.attention")}</Text>
               <View style={styles.badge}>
                 <Text style={styles.badgeTxt}>{attention.length}</Text>
               </View>
@@ -171,7 +177,7 @@ export default function HomeScreen() {
                   <Image source={{ uri: it.photo }} style={styles.attentionImg} contentFit="cover" transition={220} />
                   <View style={{ flex: 1 }}>
                     <Text style={styles.attentionName} numberOfLines={1}>{it.name}</Text>
-                    <Text style={styles.attentionHint} numberOfLines={1}>{it.photo_coach[0] || "Complétez l'annonce"}</Text>
+                    <Text style={styles.attentionHint} numberOfLines={1}>{it.photo_coach[0] || t("detail.missing")}</Text>
                   </View>
                   <View style={styles.scorePill}>
                     <Text style={styles.scorePillTxt}>{it.sell_score}</Text>
@@ -186,18 +192,18 @@ export default function HomeScreen() {
         {!loading && (
           <Animated.View entering={FadeIn.duration(360).delay(320)} style={styles.section}>
             <View style={styles.sectionHead}>
-              <Text style={styles.sectionTitle}>Objets récents</Text>
+              <Text style={styles.sectionTitle}>{t("home.recent")}</Text>
               <PressableScale onPress={() => router.push("/(tabs)/items")} hapticStyle="selection" style={{ padding: 6 }}>
-                <Text style={styles.link}>Tout voir</Text>
+                <Text style={styles.link}>{t("common.seeAll")}</Text>
               </PressableScale>
             </View>
             {recent.length === 0 ? (
               <EmptyState
                 testID="empty-state"
                 icon="sparkles-outline"
-                title="Vos trésors dorment encore"
-                subtitle="Un scan suffit à révéler ce qu'ils valent."
-                ctaLabel="Scanner un objet"
+                title={t("home.emptyTitle")}
+                subtitle={t("home.emptySub")}
+                ctaLabel={t("home.scanTitle")}
                 onCta={() => router.push("/(tabs)/scan")}
               />
             ) : (
@@ -218,7 +224,7 @@ export default function HomeScreen() {
                       <View style={styles.recentBody}>
                         <Text style={styles.recentName} numberOfLines={1}>{it.name}</Text>
                         <View style={styles.recentRow}>
-                          <Text style={styles.recentPrice}>{formatEUR(it.listing.price)}</Text>
+                          <Text style={styles.recentPrice}>{formatMoney(it.listing.price)}</Text>
                           <View style={[styles.condDot, { backgroundColor: conditionColor(it.condition) }]} />
                         </View>
                       </View>

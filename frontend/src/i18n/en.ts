@@ -85,6 +85,9 @@ export const en = {
       generic: "Something went wrong during analysis. Check your connection and try again.",
     },
     resetBtn: "Start over",
+    header: { idle: "Scan", preview: "Preview", analyzing: "Analysis", error: "Error", results: "Result" },
+    permCamera: "Camera permission denied. Use the gallery.",
+    permGallery: "Gallery permission denied.",
   },
   detail: {
     sellScore: "Sell Score",

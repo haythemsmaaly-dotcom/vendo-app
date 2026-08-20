@@ -13,7 +13,7 @@ import Animated, {
 } from "react-native-reanimated";
 import * as Haptics from "expo-haptics";
 
-import { theme, formatEUR, conditionColor, statusLabel } from "@/src/theme";
+import { theme, conditionColor } from "@/src/theme";
 import { api, Item } from "@/src/api";
 import SellScoreRing from "@/src/components/SellScoreRing";
 import Sparkline from "@/src/components/Sparkline";
@@ -29,7 +29,7 @@ const HERO_H = 380;
 export default function ItemDetail() {
   const { id } = useLocalSearchParams<{ id: string }>();
   const router = useRouter();
-  const { t, settings } = useSettings();
+  const { t, settings, formatMoney } = useSettings();
   const { user } = useAuth();
   const { width: W } = useWindowDimensions();
   const [item, setItem] = useState<Item | null>(null);
@@ -230,15 +230,15 @@ export default function ItemDetail() {
           <View style={styles.scoreCard}>
             <SellScoreRing score={item.sell_score} size={110} delay={200} duration={1100} />
             <View style={{ flex: 1, gap: 8 }}>
-              <Text style={styles.scoreTitle}>Sell Score</Text>
+              <Text style={styles.scoreTitle}>{t("detail.sellScore")}</Text>
               <Text style={styles.scoreDesc}>
-                {item.sell_score >= 80 ? "Excellent ! Votre annonce est très optimisée."
-                : item.sell_score >= 60 ? "Bonne annonce. Quelques améliorations possibles."
-                : "À optimiser. Suivez les recommandations ci-dessous."}
+                {item.sell_score >= 80 ? t("detail.scoreExcellent")
+                : item.sell_score >= 60 ? t("detail.scoreGood")
+                : t("detail.scoreLow")}
               </Text>
               <View style={styles.priceBig}>
-                <Text style={styles.priceLabel}>Prix recommandé</Text>
-                <Text style={styles.priceValue}>{formatEUR(item.listing.price)}</Text>
+                <Text style={styles.priceLabel}>{t("detail.recommendedPrice")}</Text>
+                <Text style={styles.priceValue}>{formatMoney(item.listing.price)}</Text>
               </View>
             </View>
           </View>
@@ -246,7 +246,7 @@ export default function ItemDetail() {
 
         {/* Sell Score breakdown */}
         <Animated.View entering={FadeInDown.duration(360).delay(80)} style={styles.section}>
-          <Text style={styles.sectionTitle}>Ce qui compte</Text>
+          <Text style={styles.sectionTitle}>{t("detail.whatMatters")}</Text>
           <View style={styles.breakdownCard}>
             {Object.entries(item.sell_score_breakdown || {}).map(([k, v], i) => (
               <Animated.View key={k} entering={FadeInDown.duration(280).delay(120 + i * 60)} style={styles.breakdownRow}>
@@ -262,9 +262,9 @@ export default function ItemDetail() {
 
         {/* Price strategies — horizontal snap carousel with sparklines */}
         <Animated.View entering={FadeInDown.duration(360).delay(120)} style={styles.section}>
-          <Text style={styles.sectionTitle}>Stratégie de prix</Text>
+          <Text style={styles.sectionTitle}>{t("detail.strategyTitle")}</Text>
           <Text style={styles.sectionSub}>
-            Marché estimé par l{"\u2019"}IA : {formatEUR(item.market_low)} – {formatEUR(item.market_high)}
+            {t("detail.marketRange", { low: formatMoney(item.market_low), high: formatMoney(item.market_high) })}
           </Text>
           <ScrollView
             horizontal
@@ -301,7 +301,7 @@ export default function ItemDetail() {
                     )}
                   </View>
                   <Text style={[styles.stratLabel, active && { color: theme.color.onLime }]}>{s.label}</Text>
-                  <Text style={[styles.stratPrice, active && { color: theme.color.onLime }]}>{formatEUR(s.price)}</Text>
+                  <Text style={[styles.stratPrice, active && { color: theme.color.onLime }]}>{formatMoney(s.price)}</Text>
                   <Text style={[styles.stratExpl, active && { color: "rgba(10,10,10,0.72)" }]} numberOfLines={2}>
                     {s.explanation}
                   </Text>
@@ -314,26 +314,26 @@ export default function ItemDetail() {
         {/* Listing generator */}
         <Animated.View entering={FadeInDown.duration(360).delay(160)} style={styles.section}>
           <View style={styles.rowBetween}>
-            <Text style={styles.sectionTitle}>Annonce générée</Text>
+            <Text style={styles.sectionTitle}>{t("detail.listingTitle")}</Text>
             <PressableScale
               testID="edit-listing-btn"
               hapticStyle="medium"
               onPress={() => (editMode ? saveEdits() : setEditMode(true))}
               style={styles.smallBtn}
             >
-              <Text style={styles.smallBtnTxt}>{saving ? "…" : editMode ? "Enregistrer" : "Modifier"}</Text>
+              <Text style={styles.smallBtnTxt}>{saving ? "…" : editMode ? t("common.save") : t("common.edit")}</Text>
             </PressableScale>
           </View>
 
           <View style={styles.listCard}>
-            <FieldLabel>Titre</FieldLabel>
+            <FieldLabel>{t("detail.field.title")}</FieldLabel>
             {editMode ? (
               <TextInput value={draftTitle} onChangeText={setDraftTitle} style={styles.input} placeholderTextColor={theme.color.textFaint} testID="input-title" />
             ) : (
               <Text style={styles.fieldValue}>{item.listing.title}</Text>
             )}
 
-            <FieldLabel>Description</FieldLabel>
+            <FieldLabel>{t("detail.field.description")}</FieldLabel>
             {editMode ? (
               <TextInput
                 value={draftDesc}
@@ -346,16 +346,16 @@ export default function ItemDetail() {
               <Text style={styles.fieldValue}>{item.listing.description}</Text>
             )}
 
-            <FieldLabel>Prix</FieldLabel>
+            <FieldLabel>{t("detail.field.price")}</FieldLabel>
             {editMode ? (
               <TextInput value={draftPrice} onChangeText={setDraftPrice} keyboardType="numeric" style={styles.input} testID="input-price" />
             ) : (
               <Text style={[styles.fieldValue, { color: theme.color.lime, fontSize: 20, fontFamily: theme.font.displayBold }]}>
-                {formatEUR(item.listing.price)}
+                {formatMoney(item.listing.price)}
               </Text>
             )}
 
-            <FieldLabel>Mots-clés</FieldLabel>
+            <FieldLabel>{t("detail.field.keywords")}</FieldLabel>
             <View style={styles.kwWrap}>
               {item.listing.keywords.map(k => (
                 <View key={k} style={styles.kw}>
@@ -369,8 +369,8 @@ export default function ItemDetail() {
         {/* Condition reasons (from AI) */}
         {item.condition_reasons && item.condition_reasons.length > 0 && (
           <Animated.View entering={FadeInDown.duration(360).delay(180)} style={styles.section}>
-            <Text style={styles.sectionTitle}>Ce que Vendo voit</Text>
-            <Text style={styles.sectionSub}>Analyse visuelle de l{"\u2019"}état.</Text>
+            <Text style={styles.sectionTitle}>{t("detail.conditionSees")}</Text>
+            <Text style={styles.sectionSub}>{t("detail.conditionSub")}</Text>
             <View style={styles.conditionCard}>
               {item.condition_reasons.map((r, i) => (
                 <View key={i} style={styles.conditionRow}>
@@ -385,8 +385,8 @@ export default function ItemDetail() {
         {/* Photo coach */}
         {item.photo_coach.length > 0 && (
           <Animated.View entering={FadeInDown.duration(360).delay(200)} style={styles.section}>
-            <Text style={styles.sectionTitle}>Coach photos IA</Text>
-            <Text style={styles.sectionSub}>Ajoutez ces clichés pour augmenter votre Sell Score.</Text>
+            <Text style={styles.sectionTitle}>{t("detail.coach")}</Text>
+            <Text style={styles.sectionSub}>{t("detail.coachSub")}</Text>
             <View style={{ gap: 8, marginTop: 12 }}>
               {item.photo_coach.map((tip, i) => (
                 <Animated.View key={i} entering={FadeInDown.duration(280).delay(240 + i * 60)} style={styles.coachRow}>
@@ -403,7 +403,7 @@ export default function ItemDetail() {
         {/* Missing info */}
         {item.missing_info.length > 0 && (
           <Animated.View entering={FadeInDown.duration(360).delay(240)} style={styles.section}>
-            <Text style={styles.sectionTitle}>Informations manquantes</Text>
+            <Text style={styles.sectionTitle}>{t("detail.missing")}</Text>
             <View style={styles.missingCard}>
               {item.missing_info.map((m, i) => (
                 <View key={i} style={styles.missingRow}>
@@ -417,12 +417,11 @@ export default function ItemDetail() {
 
         {/* Sell plan */}
         <Animated.View entering={FadeInDown.duration(360).delay(280)} style={styles.section}>
-          <Text style={styles.sectionTitle}>Plan de vente</Text>
-          <Text style={styles.sectionSub}>Choisissez votre approche.</Text>
+          <Text style={styles.sectionTitle}>{t("detail.plan")}</Text>
+          <Text style={styles.sectionSub}>{t("detail.planSub")}</Text>
           <View style={styles.planPicker}>
             {(["quick", "balanced", "best"] as const).map(m => {
               const active = planMode === m;
-              const labels: any = { quick: "Rapide", balanced: "Équilibré", best: "Meilleur prix" };
               return (
                 <PressableScale
                   key={m}
@@ -431,16 +430,16 @@ export default function ItemDetail() {
                   onPress={() => pickPlan(m)}
                   style={[styles.planTab, active && styles.planTabActive]}
                 >
-                  <Text style={[styles.planTabTxt, active && { color: theme.color.onLime }]}>{labels[m]}</Text>
+                  <Text style={[styles.planTabTxt, active && { color: theme.color.onLime }]}>{t(`detail.planModes.${m}`)}</Text>
                 </PressableScale>
               );
             })}
           </View>
           <View style={styles.planCard}>
-            <PlanRow label="Prix de départ" value={formatEUR(item.sell_plan.start_price)} />
-            <PlanRow label={`Ajustement après ${item.sell_plan.adjustment_days}j`} value={formatEUR(item.sell_plan.adjusted_price)} />
-            <PlanRow label="Prix minimum" value={formatEUR(item.sell_plan.minimum_price)} muted />
-            <PlanRow label="Date cible" value={new Date(item.sell_plan.target_date).toLocaleDateString("fr-FR")} muted />
+            <PlanRow label={t("detail.planStart")} value={formatMoney(item.sell_plan.start_price)} />
+            <PlanRow label={t("detail.planAdjust", { days: item.sell_plan.adjustment_days })} value={formatMoney(item.sell_plan.adjusted_price)} />
+            <PlanRow label={t("detail.planMin")} value={formatMoney(item.sell_plan.minimum_price)} muted />
+            <PlanRow label={t("detail.planDate")} value={new Date(item.sell_plan.target_date).toLocaleDateString(settings.locale === "en" ? "en-GB" : "fr-FR")} muted />
           </View>
         </Animated.View>
 
@@ -534,10 +533,10 @@ export default function ItemDetail() {
           >
             <Ionicons name={item.status === "ready" ? "checkmark-circle" : "rocket"} size={20} color={theme.color.onLime} />
             <Text style={styles.publishTxt}>
-              {item.status === "ready" ? "Prêt à publier · Marquer brouillon" : "Marquer comme prêt à publier"}
+              {item.status === "ready" ? t("detail.publishReady") : t("detail.publishNotReady")}
             </Text>
           </PressableScale>
-          <Text style={styles.statusHint}>Statut actuel : {statusLabel(item.status)}</Text>
+          <Text style={styles.statusHint}>{t("detail.statusHint", { status: t(`status.${item.status}`) })}</Text>
         </Animated.View>
       </Animated.ScrollView>
     </KeyboardAvoidingView>
