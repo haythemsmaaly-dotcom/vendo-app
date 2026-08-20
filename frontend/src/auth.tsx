@@ -1,6 +1,6 @@
 import React, { createContext, useCallback, useContext, useEffect, useMemo, useState } from "react";
-import * as SecureStore from "expo-secure-store";
 import { api, setAuthToken, User } from "@/src/api";
+import { storage } from "@/src/utils/storage";
 
 const TOKEN_KEY = "vendo.auth.token";
 
@@ -21,25 +21,30 @@ export function AuthProvider({ children }: { children: React.ReactNode }) {
 
   useEffect(() => {
     (async () => {
-      const token = await SecureStore.getItemAsync(TOKEN_KEY);
-      if (token) {
-        setAuthToken(token);
-        try { setUser(await api.me()); }
-        catch { await SecureStore.deleteItemAsync(TOKEN_KEY); setAuthToken(null); }
+      try {
+        const token = await storage.secureGet<string>(TOKEN_KEY, "");
+        if (token) {
+          setAuthToken(token);
+          try { setUser(await api.me()); }
+          catch { await storage.secureRemove(TOKEN_KEY); setAuthToken(null); }
+        }
+      } catch {
+        // Never let session restore crash app boot.
+      } finally {
+        setReady(true);
       }
-      setReady(true);
     })();
   }, []);
 
   const accept = useCallback(async (res: { token: string; user: User }) => {
-    await SecureStore.setItemAsync(TOKEN_KEY, res.token);
+    await storage.secureSet(TOKEN_KEY, res.token);
     setAuthToken(res.token);
     setUser(res.user);
   }, []);
 
   const signIn = useCallback(async (email: string, password: string) => accept(await api.login(email, password)), [accept]);
   const register = useCallback(async (email: string, password: string, displayName: string, location?: string) => accept(await api.register(email, password, displayName, location)), [accept]);
-  const signOut = useCallback(async () => { await SecureStore.deleteItemAsync(TOKEN_KEY); setAuthToken(null); setUser(null); }, []);
+  const signOut = useCallback(async () => { await storage.secureRemove(TOKEN_KEY); setAuthToken(null); setUser(null); }, []);
   const refresh = useCallback(async () => { if (user) setUser(await api.me()); }, [user]);
 
   const value = useMemo(() => ({ user, ready, signIn, register, signOut, refresh }), [user, ready, signIn, register, signOut, refresh]);

@@ -12,7 +12,7 @@
       "supportsTablet": true,
       "bundleIdentifier": "com.emergent.resaleai.zrubj6",
       "infoPlist": {
-        "NSCameraUsageDescription": "Photographier vos objets à revendre",
+        "NSCameraUsageDescription": "Photographier vos objets \u00e0 revendre",
         "NSPhotoLibraryUsageDescription": "Choisir des photos de vos objets"
       }
     },

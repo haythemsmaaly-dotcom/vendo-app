@@ -29,8 +29,16 @@ export default function RootLayout() {
   const router = useRouter();
   const segments = useSegments();
   const [onboardingChecked, setOnboardingChecked] = useState(false);
+  const [forceReady, setForceReady] = useState(false);
 
-  const fontsReady = (iconsLoaded || iconsErr) && (textFontsLoaded || textFontsErr);
+  // Fail-safe: never hang on font loading (e.g. web FontFace not resolving).
+  // After a short window we proceed with system fonts instead of a blank screen.
+  useEffect(() => {
+    const id = setTimeout(() => setForceReady(true), 2500);
+    return () => clearTimeout(id);
+  }, []);
+
+  const fontsReady = ((iconsLoaded || iconsErr) && (textFontsLoaded || textFontsErr)) || forceReady;
   const ready = fontsReady && onboardingChecked;
 
   // Check onboarding flag once fonts ready; redirect if first launch
