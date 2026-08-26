@@ -16,11 +16,6 @@ export type Settings = {
 
 const STORAGE_KEY = "vendo.settings";
 
-const COUNTRY_CURRENCY: Record<CountryCode, CurrencyCode> = {
-  fr: "EUR", be: "EUR", ch: "CHF", lu: "EUR", ca: "CAD",
-  gb: "GBP", us: "USD", de: "EUR", es: "EUR", it: "EUR", nl: "EUR",
-};
-
 // Static EUR-based conversion rates. Item prices are stored/estimated in EUR by the
 // AI; these let us DISPLAY them consistently in the user's chosen currency without a
 // live FX dependency. Approximate — fine for a resale price estimate. Swap for a live
@@ -85,9 +80,9 @@ export function SettingsProvider({ children }: { children: React.ReactNode }) {
   }, [settings, persist]);
 
   const setCountry = useCallback(async (c: CountryCode) => {
-    // Auto-align currency and default marketplaces to country when user hasn't touched them.
-    const currency = COUNTRY_CURRENCY[c] || settings.currency;
-    await persist({ ...settings, country: c, currency });
+    // Country is independent of currency: selecting a country must NOT change the
+    // currency (or any other selector). Users pick currency explicitly.
+    await persist({ ...settings, country: c });
   }, [settings, persist]);
 
   const setCurrency = useCallback(async (c: CurrencyCode) => {
