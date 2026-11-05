@@ -24,7 +24,7 @@ export default function AnimatedNumber({
   testID,
 }: Props) {
   const anim = useSharedValue(0);
-  const [display, setDisplay] = useState(format(0));
+  const [current, setCurrent] = useState(0);
 
   useEffect(() => {
     anim.value = withTiming(value, {
@@ -36,10 +36,9 @@ export default function AnimatedNumber({
   useAnimatedReaction(
     () => anim.value,
     (curr) => {
-      runOnJS(setDisplay)(format(curr));
+      runOnJS(setCurrent)(curr);
     },
-    [format],
   );
 
-  return <Text style={style} testID={testID}>{display}</Text>;
+  return <Text style={style} testID={testID}>{format(current)}</Text>;
 }
