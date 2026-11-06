@@ -1,4 +1,6 @@
 from fastapi import FastAPI, APIRouter, HTTPException, Depends, Header
+from fastapi.responses import HTMLResponse
+import legal_pages
 from dotenv import load_dotenv
 from starlette.middleware.cors import CORSMiddleware
 from motor.motor_asyncio import AsyncIOMotorClient
@@ -875,6 +877,22 @@ async def coach_tips(req: CoachRequest, user: dict = Depends(current_user)):
     except Exception:
         logger.exception("Selling coach failed")
         return {"tips": [], "limited": False}
+
+
+# --------- Public legal pages (no login) ---------
+@api_router.get("/privacy", response_class=HTMLResponse)
+async def page_privacy():
+    return legal_pages.render(legal_pages.PRIVACY)
+
+
+@api_router.get("/terms", response_class=HTMLResponse)
+async def page_terms():
+    return legal_pages.render(legal_pages.TERMS)
+
+
+@api_router.get("/delete-account", response_class=HTMLResponse)
+async def page_delete_account():
+    return legal_pages.render(legal_pages.DELETE_ACCOUNT)
 
 
 app.include_router(api_router)

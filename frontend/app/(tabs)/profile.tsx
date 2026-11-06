@@ -113,8 +113,9 @@ export default function ProfileScreen() {
             <LinkRow icon="chatbubble-ellipses-outline" label="Marketplace messages" testID="acc-inbox" onPress={() => router.push("/inbox")} />
             <LinkRow icon="heart-outline" label="Saved marketplace items" testID="acc-favorites" onPress={() => router.push("/favorites")} />
             <LinkRow icon="card-outline" label={t("profile.accPay")} testID="acc-pay" />
-            <LinkRow icon="shield-checkmark-outline" label="Privacy notice" testID="acc-priv" onPress={() => router.push("/legal/privacy")} />
-            <LinkRow icon="document-text-outline" label="Terms of use" testID="acc-terms" onPress={() => router.push("/legal/terms")} />
+            <LinkRow icon="shield-checkmark-outline" label="Privacy Policy" testID="acc-priv" onPress={() => router.push("/legal/privacy")} />
+            <LinkRow icon="document-text-outline" label="Terms of Use" testID="acc-terms" onPress={() => router.push("/legal/terms")} />
+            <LinkRow icon="trash-outline" label="Account deletion" testID="acc-delete-info" onPress={() => router.push("/legal/delete-account")} />
           </Section>
         </Animated.View>
 

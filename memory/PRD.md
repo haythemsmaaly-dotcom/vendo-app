@@ -59,3 +59,6 @@ The app has moved well beyond the original V1 mock. Now delivered & verified:
 ## Selling Coach (June 2026)
 - POST /api/coach/tips (auth): Gemini 3 Flash, JSON-only, validated 3-4 tips {type,title,body}; 10 calls/user/hour via `coach_calls`; failure/limit -> empty list (card hides). Account deletion clears coach_calls.
 - Component src/components/SellingCoach.tsx shown on scan results and sell form (/sell/[id]); loads on mount + Refresh button.
+
+## Legal pages (June 2026)
+- Public HTML (no login) from backend/legal_pages.py: /api/privacy, /api/terms, /api/delete-account. In-app copies in src/legal.ts via src/components/LegalScreen.tsx (app/legal/*). Links in Profile + sign-up screen.
