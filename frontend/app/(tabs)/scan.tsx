@@ -36,7 +36,30 @@ export default function ScanScreen() {
   const [error, setError] = useState<string | null>(null);
   const [errorTitle, setErrorTitle] = useState<string>("");
   const [previewItem, setPreviewItem] = useState<Item | null>(null);
+  const [walletState, setWalletState] = useState<"idle" | "saving" | "saved" | "error">("idle");
   const createdIdRef = useRef<string | null>(null);
+
+  const saveToWallet = async () => {
+    if (!previewItem || walletState === "saving" || walletState === "saved") return;
+    if (!user) { router.push("/auth"); return; }
+    setWalletState("saving");
+    try {
+      await api.walletAdd({
+        title: previewItem.listing?.title || previewItem.name,
+        description: previewItem.listing?.description || "",
+        photo_url: previewItem.photo,
+        value_low: previewItem.market_low,
+        value_high: previewItem.market_high,
+        currency: "EUR",
+        category: previewItem.category,
+        condition: previewItem.condition,
+      });
+      setWalletState("saved");
+      try { Haptics.notificationAsync(Haptics.NotificationFeedbackType.Success); } catch {}
+    } catch {
+      setWalletState("error");
+    }
+  };
 
   // Scanline animation
   const scan = useSharedValue(0);
@@ -179,6 +202,7 @@ export default function ScanScreen() {
     setProgress(0);
     createdIdRef.current = null;
     setPreviewItem(null);
+    setWalletState("idle");
 
     // Live progress: cycle through steps while the real call is in flight
     let cancelled = false;
@@ -511,13 +535,32 @@ export default function ScanScreen() {
 
             <Animated.View entering={FadeInDown.duration(360).delay(420)}>
               <PressableScale
+                testID="save-to-wallet-btn"
+                hapticStyle="medium"
+                onPress={saveToWallet}
+                disabled={walletState === "saving" || walletState === "saved"}
+                style={[styles.primaryBtn, walletState === "saved" && styles.walletSavedBtn]}
+              >
+                <Ionicons
+                  name={walletState === "saved" ? "checkmark-circle" : "wallet"}
+                  size={18}
+                  color={walletState === "saved" ? theme.color.lime : theme.color.onLime}
+                />
+                <Text style={[styles.primaryBtnTxt, walletState === "saved" && { color: theme.color.lime }]}>
+                  {walletState === "saving" ? t("wallet.saving")
+                    : walletState === "saved" ? t("wallet.saved")
+                    : walletState === "error" ? t("wallet.saveError")
+                    : t("wallet.save")}
+                </Text>
+              </PressableScale>
+              <PressableScale
                 testID="open-result-btn"
                 hapticStyle="medium"
                 onPress={openResult}
-                style={styles.primaryBtn}
+                style={[styles.altCta, { marginTop: 12 }]}
               >
-                <Text style={styles.primaryBtnTxt}>{t("common.seeDetail")}</Text>
-                <Ionicons name="arrow-forward" size={18} color={theme.color.onLime} />
+                <Text style={styles.altCtaTxt}>{t("common.seeDetail")}</Text>
+                <Ionicons name="arrow-forward" size={18} color={theme.color.text} />
               </PressableScale>
               <PressableScale
                 testID="scan-again-btn"
@@ -606,6 +649,7 @@ const styles = StyleSheet.create({
     flexDirection: "row", alignItems: "center", justifyContent: "center", gap: 10,
   },
   primaryBtnTxt: { color: theme.color.onLime, fontSize: 16, fontFamily: theme.font.textBold },
+  walletSavedBtn: { backgroundColor: theme.color.limeSoft, borderWidth: 1, borderColor: theme.color.lime },
   analyzeWrap: { flex: 1, padding: 24, alignItems: "center", justifyContent: "center" },
   analyzeCard: {
     width: 280, height: 280, borderRadius: 28, overflow: "hidden",

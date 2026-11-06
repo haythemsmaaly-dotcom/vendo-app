@@ -402,10 +402,71 @@ async def delete_account(user: dict = Depends(current_user)):
     await db.favorites.delete_many({"$or": [{"user_id": uid}, {"item_id": {"$in": owned_ids}}]})
     await db.messages.delete_many({"$or": [{"buyer_id": uid}, {"seller_id": uid}, {"listing_id": {"$in": owned_ids}}]})
     await db.reports.delete_many({"reporter_id": uid})
+    await db.wallet_items.delete_many({"user_id": uid})
     if owned_ids:
         await db.reports.delete_many({"listing_id": {"$in": owned_ids}})
     await db.users.delete_one({"id": uid})
     return {"ok": True}
+
+
+# --------- My VENDO Wallet (personal inventory, not real money) ---------
+class WalletItemCreate(BaseModel):
+    title: str
+    description: str = ""
+    photo_url: str
+    value_low: float
+    value_high: float
+    currency: str = "EUR"  # stored amounts use the app's EUR base, like items
+    category: Optional[str] = None
+    condition: Optional[str] = None
+
+
+class WalletItem(WalletItemCreate):
+    id: str
+    user_id: str
+    created_at: str
+
+
+@api_router.post("/wallet", response_model=WalletItem)
+async def wallet_add(req: WalletItemCreate, user: dict = Depends(current_user)):
+    if not req.title.strip() or req.value_low < 0 or req.value_high < req.value_low:
+        raise HTTPException(status_code=400, detail="Invalid wallet item")
+    doc = {**req.model_dump(), "id": str(uuid.uuid4()), "user_id": user["id"], "created_at": datetime.now(timezone.utc).isoformat()}
+    await db.wallet_items.insert_one(doc.copy())
+    return WalletItem(**doc)
+
+
+@api_router.get("/wallet", response_model=List[WalletItem])
+async def wallet_list(user: dict = Depends(current_user)):
+    return await db.wallet_items.find({"user_id": user["id"]}, {"_id": 0}).sort("created_at", -1).to_list(1000)
+
+
+@api_router.get("/wallet/summary")
+async def wallet_summary(user: dict = Depends(current_user)):
+    docs = await db.wallet_items.find({"user_id": user["id"]}, {"_id": 0, "value_low": 1, "value_high": 1}).to_list(1000)
+    return {
+        "count": len(docs),
+        "total_low": round(sum(d["value_low"] for d in docs), 2),
+        "total_high": round(sum(d["value_high"] for d in docs), 2),
+        "currency": "EUR",
+    }
+
+
+@api_router.get("/wallet/{wallet_id}", response_model=WalletItem)
+async def wallet_get(wallet_id: str, user: dict = Depends(current_user)):
+    doc = await db.wallet_items.find_one({"id": wallet_id, "user_id": user["id"]}, {"_id": 0})
+    if not doc:
+        raise HTTPException(status_code=404, detail="Wallet item not found")
+    return doc
+
+
+@api_router.delete("/wallet/{wallet_id}")
+async def wallet_delete(wallet_id: str, user: dict = Depends(current_user)):
+    res = await db.wallet_items.delete_one({"id": wallet_id, "user_id": user["id"]})
+    if res.deleted_count == 0:
+        raise HTTPException(status_code=404, detail="Wallet item not found")
+    return {"ok": True}
+
 
 
 # --------- Marketplace ---------

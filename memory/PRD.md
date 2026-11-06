@@ -50,3 +50,8 @@ The app has moved well beyond the original V1 mock. Now delivered & verified:
 - Real market pricing (eBay/SerpAPI) intentionally deferred — market range stays an AI estimate labeled as such.
 - Item-detail price EDIT input edits the underlying EUR base value (display is converted).
 - NL/DE/ES/IT translations not shipped (only FR/EN).
+
+## My VENDO Wallet (June 2026)
+- Personal inventory (not real money). Collection `wallet_items` (user_id, title, description, photo_url, value_low, value_high, currency=EUR base, category, condition, created_at).
+- Endpoints (auth, owner-only): POST/GET /api/wallet, GET /api/wallet/summary, GET/DELETE /api/wallet/{id}. Account deletion removes wallet items.
+- Frontend: Wallet tab app/(tabs)/wallet.tsx, detail app/wallet/[id].tsx, "Save to My Wallet" on scan results; "List on VENDO" creates a draft item and opens /sell/[id].

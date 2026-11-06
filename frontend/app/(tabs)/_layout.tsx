@@ -4,6 +4,7 @@ import { Ionicons } from "@expo/vector-icons";
 import { View, StyleSheet, Pressable } from "react-native";
 import * as Haptics from "expo-haptics";
 import { theme } from "@/src/theme";
+import { useSettings } from "@/src/i18n/SettingsContext";
 
 function TabIcon({ name, color, focused }: { name: any; color: string; focused: boolean }) {
   return (
@@ -14,6 +15,7 @@ function TabIcon({ name, color, focused }: { name: any; color: string; focused: 
 }
 
 export default function TabsLayout() {
+  const { t } = useSettings();
   return (
     <Tabs
       screenOptions={{
@@ -71,6 +73,15 @@ export default function TabsLayout() {
           title: "Mes objets",
           tabBarIcon: ({ color, focused }) => (
             <TabIcon name={focused ? "grid" : "grid-outline"} color={color} focused={focused} />
+          ),
+        }}
+      />
+      <Tabs.Screen
+        name="wallet"
+        options={{
+          title: t("wallet.tab"),
+          tabBarIcon: ({ color, focused }) => (
+            <TabIcon name={focused ? "wallet" : "wallet-outline"} color={color} focused={focused} />
           ),
         }}
       />

@@ -98,7 +98,18 @@ export type AnalyzedItem = {
   description: string;
 };
 
+export type WalletItem = {
+  id: string; user_id: string; title: string; description: string; photo_url: string;
+  value_low: number; value_high: number; currency: string; category?: string | null; condition?: string | null; created_at: string;
+};
+export type WalletSummary = { count: number; total_low: number; total_high: number; currency: string };
+
 export const api = {
+  walletAdd: (item: Omit<WalletItem, 'id' | 'user_id' | 'created_at'>) => fetch(`${API_BASE}/wallet`, { method: 'POST', headers: authHeaders({ 'Content-Type': 'application/json' }), body: JSON.stringify(item) }).then(r => j<WalletItem>(r)),
+  walletList: () => fetch(`${API_BASE}/wallet`, { headers: authHeaders() }).then(r => j<WalletItem[]>(r)),
+  walletSummary: () => fetch(`${API_BASE}/wallet/summary`, { headers: authHeaders() }).then(r => j<WalletSummary>(r)),
+  walletGet: (id: string) => fetch(`${API_BASE}/wallet/${id}`, { headers: authHeaders() }).then(r => j<WalletItem>(r)),
+  walletRemove: (id: string) => fetch(`${API_BASE}/wallet/${id}`, { method: 'DELETE', headers: authHeaders() }).then(r => j<{ ok: boolean }>(r)),
   list: () => fetch(`${API_BASE}/items`, { headers: authHeaders() }).then(r => j<Item[]>(r)),
   get: (id: string) => fetch(`${API_BASE}/items/${id}`, { headers: authHeaders() }).then(r => j<Item>(r)),
   create: (item: Item) =>

@@ -88,6 +88,7 @@ export default function RootLayout() {
               />
               <Stack.Screen name="auth" options={{ animation: "slide_from_bottom", presentation: "modal" }} />
               <Stack.Screen name="sell/[id]" options={{ animation: "slide_from_right" }} />
+              <Stack.Screen name="wallet/[id]" options={{ animation: "slide_from_right" }} />
               <Stack.Screen name="marketplace/[id]" options={{ animation: "slide_from_right" }} />
               <Stack.Screen name="inbox" options={{ animation: "slide_from_right" }} />
               <Stack.Screen name="favorites" options={{ animation: "slide_from_right" }} />
