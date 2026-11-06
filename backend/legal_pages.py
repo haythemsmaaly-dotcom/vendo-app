@@ -4,7 +4,7 @@ import html
 NAME = "Haythem ben Ismain"
 CITY = "Rotterdam"
 EMAIL = "haythemsmaaly@gmail.com"
-UPDATED = "June 2026"
+UPDATED = "6 November 2026"
 
 PRIVACY = {
     "title": "VENDO Privacy Policy",

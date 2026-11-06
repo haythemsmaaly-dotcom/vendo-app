@@ -1,7 +1,7 @@
 // In-app copy of the public legal pages (served by the backend at /api/privacy, /api/terms, /api/delete-account).
 // Keep in sync with backend/legal_pages.py.
 const EMAIL = "haythemsmaaly@gmail.com";
-const UPDATED = "June 2026";
+const UPDATED = "6 November 2026";
 
 export type LegalDoc = { title: string; intro: string; sections: [string, string][] };
 
