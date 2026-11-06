@@ -96,6 +96,7 @@ export default function RootLayout() {
               <Stack.Screen name="legal/privacy" options={{ animation: "slide_from_right" }} />
               <Stack.Screen name="legal/terms" options={{ animation: "slide_from_right" }} />
               <Stack.Screen name="legal/delete-account" options={{ animation: "slide_from_right" }} />
+              <Stack.Screen name="help" options={{ animation: "slide_from_right" }} />
               <Stack.Screen
                 name="settings/region"
                 options={{ animation: "slide_from_right", animationDuration: 260, presentation: "modal" }}

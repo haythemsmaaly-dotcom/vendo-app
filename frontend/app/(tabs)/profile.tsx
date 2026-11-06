@@ -1,5 +1,6 @@
 import React, { useCallback, useState } from "react";
-import { View, Text, StyleSheet, ScrollView, Switch, Alert } from "react-native";
+import { View, Text, StyleSheet, ScrollView, Switch, Alert, Linking, Modal } from "react-native";
+import * as Clipboard from "expo-clipboard";
 import { SafeAreaView } from "react-native-safe-area-context";
 import { Ionicons } from "@expo/vector-icons";
 import { useFocusEffect, useRouter } from "expo-router";
@@ -20,6 +21,18 @@ export default function ProfileScreen() {
   const [stats, setStats] = useState<{ total_items: number; items_sold: number; total_earned: number; average_sale_price: number; total_potential: number } | null>(null);
   const [notifs, setNotifs] = useState(true);
   const [priceAlerts, setPriceAlerts] = useState(true);
+  const [mailFallback, setMailFallback] = useState(false);
+  const [copied, setCopied] = useState(false);
+
+  const contactSupport = useCallback(async () => {
+    const url = `mailto:${t("support.email")}?subject=${encodeURIComponent(t("support.subject"))}`;
+    try {
+      await Linking.openURL(url);
+    } catch {
+      setCopied(false);
+      setMailFallback(true);
+    }
+  }, [t]);
 
   const load = useCallback(async () => {
     try { setStats(await api.stats()); } catch (e) { console.warn(e); }
@@ -113,17 +126,18 @@ export default function ProfileScreen() {
             <LinkRow icon="chatbubble-ellipses-outline" label="Marketplace messages" testID="acc-inbox" onPress={() => router.push("/inbox")} />
             <LinkRow icon="heart-outline" label="Saved marketplace items" testID="acc-favorites" onPress={() => router.push("/favorites")} />
             <LinkRow icon="card-outline" label={t("profile.accPay")} testID="acc-pay" />
-            <LinkRow icon="shield-checkmark-outline" label="Privacy Policy" testID="acc-priv" onPress={() => router.push("/legal/privacy")} />
-            <LinkRow icon="document-text-outline" label="Terms of Use" testID="acc-terms" onPress={() => router.push("/legal/terms")} />
-            <LinkRow icon="trash-outline" label="Account deletion" testID="acc-delete-info" onPress={() => router.push("/legal/delete-account")} />
+            <LinkRow icon="shield-checkmark-outline" label={t("support.privacy")} testID="acc-priv" onPress={() => router.push("/legal/privacy")} />
+            <LinkRow icon="document-text-outline" label={t("support.terms")} testID="acc-terms" onPress={() => router.push("/legal/terms")} />
+            <LinkRow icon="trash-outline" label={t("support.deletionInfo")} testID="acc-delete-info" onPress={() => router.push("/legal/delete-account")} />
           </Section>
         </Animated.View>
 
         <Animated.View entering={FadeInDown.duration(360).delay(260)}>
           <Section title={t("profile.support")}>
-            <LinkRow icon="help-circle-outline" label={t("profile.supHelp")} testID="sup-help" />
-            <LinkRow icon="chatbubble-ellipses-outline" label={t("profile.supContact")} testID="sup-contact" />
-            <LinkRow icon="star-outline" label={t("profile.supRate")} testID="sup-rate" />
+            <LinkRow icon="help-circle-outline" label={t("profile.supHelp")} testID="sup-help" onPress={() => router.push("/help")} />
+            <LinkRow icon="chatbubble-ellipses-outline" label={t("profile.supContact")} testID="sup-contact" onPress={contactSupport} />
+            {/* "Rate VENDO" hidden until VENDO is on the Play Store. To re-enable, restore:
+                <LinkRow icon="star-outline" label={t("profile.supRate")} testID="sup-rate" onPress={() => Linking.openURL("<store URL>")} /> */}
             <LinkRow
               icon="play-circle-outline"
               label={t("profile.replayOnboarding")}
@@ -133,25 +147,41 @@ export default function ProfileScreen() {
           </Section>
         </Animated.View>
 
-        <PressableScale style={styles.logout} hapticStyle="medium" testID="logout-btn" accessibilityLabel={user ? "Sign out" : "Sign in"} onPress={async () => { if (user) await signOut(); else router.push("/auth"); }}>
-          <Text style={styles.logoutTxt}>{user ? "Sign out" : "Sign in"}</Text>
+        <PressableScale style={styles.logout} hapticStyle="medium" testID="logout-btn" accessibilityLabel={user ? t("support.signOut") : t("support.signIn")} onPress={async () => { if (user) await signOut(); else router.push("/auth"); }}>
+          <Text style={styles.logoutTxt}>{user ? t("support.signOut") : t("support.signIn")}</Text>
         </PressableScale>
 
 
         {user && (
           <PressableScale style={styles.deleteAccount} hapticStyle="medium" testID="delete-account-btn" onPress={() => Alert.alert(
-            "Delete Vendo account?",
-            "This permanently removes your account, listings, favorites and marketplace messages.",
+            t("support.deleteTitle"),
+            t("support.deleteBody"),
             [
-              { text: "Cancel", style: "cancel" },
-              { text: "Delete", style: "destructive", onPress: async () => { try { await api.deleteAccount(); await signOut(); } catch (e: any) { Alert.alert("Could not delete account", e?.message || "Try again"); } } },
+              { text: t("support.deleteCancel"), style: "cancel" },
+              { text: t("support.deleteConfirm"), style: "destructive", onPress: async () => { try { await api.deleteAccount(); await signOut(); } catch (e: any) { Alert.alert(t("support.deleteFailed"), e?.message || t("support.tryAgain")); } } },
             ],
           )}>
-            <Text style={styles.deleteAccountTxt}>Delete account & data</Text>
+            <Text style={styles.deleteAccountTxt}>{t("support.deleteAccount")}</Text>
           </PressableScale>
         )}
         <Text style={styles.version}>{t("profile.version")}</Text>
       </ScrollView>
+      <Modal visible={mailFallback} transparent animationType="fade" onRequestClose={() => setMailFallback(false)}>
+        <View style={styles.modalScrim}>
+          <View style={styles.modalCard} testID="contact-fallback">
+            <Text style={styles.modalTitle}>{t("support.noMailTitle")}</Text>
+            <Text style={styles.modalBody}>{t("support.noMailBody")}</Text>
+            <Text selectable style={styles.modalEmail}>{t("support.email")}</Text>
+            <PressableScale testID="contact-copy" hapticStyle="selection" style={styles.modalPrimary} onPress={async () => { await Clipboard.setStringAsync(t("support.email")); setCopied(true); }}>
+              <Ionicons name={copied ? "checkmark" : "copy-outline"} size={18} color={theme.color.onLime} />
+              <Text style={styles.modalPrimaryTxt}>{copied ? t("support.copied") : t("support.copy")}</Text>
+            </PressableScale>
+            <PressableScale testID="contact-close" hapticStyle="selection" style={styles.modalSecondary} onPress={() => setMailFallback(false)}>
+              <Text style={styles.modalSecondaryTxt}>{t("support.close")}</Text>
+            </PressableScale>
+          </View>
+        </View>
+      </Modal>
     </SafeAreaView>
   );
 }
@@ -266,6 +296,15 @@ const styles = StyleSheet.create({
   logoutTxt: { color: theme.color.error, fontSize: 15, fontFamily: theme.font.textSemi },
   deleteAccount: { marginHorizontal: 24, marginTop: 12, height: 50, borderRadius: 16, borderWidth: 1, borderColor: "rgba(248,113,113,0.25)", alignItems: "center", justifyContent: "center" },
   deleteAccountTxt: { color: theme.color.error, fontSize: 13, fontFamily: theme.font.textSemi },
+  modalScrim: { flex: 1, backgroundColor: "rgba(0,0,0,0.7)", justifyContent: "center", padding: 24 },
+  modalCard: { backgroundColor: theme.color.surface, borderRadius: 24, borderWidth: 1, borderColor: theme.color.border, padding: 22 },
+  modalTitle: { color: theme.color.text, fontSize: 19, fontFamily: theme.font.displayBold },
+  modalBody: { color: theme.color.textMuted, fontSize: 14, lineHeight: 20, fontFamily: theme.font.text, marginTop: 8 },
+  modalEmail: { color: theme.color.lime, fontSize: 16, fontFamily: theme.font.textBold, marginTop: 14 },
+  modalPrimary: { marginTop: 18, height: 52, borderRadius: 16, backgroundColor: theme.color.lime, flexDirection: "row", alignItems: "center", justifyContent: "center", gap: 8 },
+  modalPrimaryTxt: { color: theme.color.onLime, fontSize: 15, fontFamily: theme.font.textBold },
+  modalSecondary: { marginTop: 10, height: 48, borderRadius: 16, borderWidth: 1, borderColor: theme.color.border, alignItems: "center", justifyContent: "center" },
+  modalSecondaryTxt: { color: theme.color.text, fontSize: 14, fontFamily: theme.font.textSemi },
   version: {
     color: theme.color.textFaint, fontSize: 11, textAlign: "center", marginTop: 20,
     fontFamily: theme.font.text,
