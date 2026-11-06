@@ -184,6 +184,12 @@ export const fr = {
     disclaimerBody: "Vendo copie votre annonce dans le presse-papier. Une fois {app} ouvert, collez-la pour créer l'annonce. Vendo ne publie pas automatiquement.",
     openNow: "Ouvrir {app}",
   },
+  coach: {
+    title: "Coach de vente",
+    disclaimer: "Suggestions uniquement. Aucune garantie d'augmenter votre prix de vente.",
+    loading: "Préparation des conseils…",
+    refresh: "Actualiser les conseils",
+  },
   wallet: {
     tab: "Wallet",
     title: "Mon Wallet VENDO",

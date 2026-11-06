@@ -104,7 +104,11 @@ export type WalletItem = {
 };
 export type WalletSummary = { count: number; total_low: number; total_high: number; currency: string };
 
+export type CoachTip = { type: 'photo' | 'price' | 'description' | 'title'; title: string; body: string };
+export type CoachInput = { title: string; description: string; price: number; category: string; photo_count: number; value_low?: number; value_high?: number; locale: string };
+
 export const api = {
+  coachTips: (input: CoachInput) => fetch(`${API_BASE}/coach/tips`, { method: 'POST', headers: authHeaders({ 'Content-Type': 'application/json' }), body: JSON.stringify(input) }).then(r => j<{ tips: CoachTip[]; limited: boolean }>(r)),
   walletAdd: (item: Omit<WalletItem, 'id' | 'user_id' | 'created_at'>) => fetch(`${API_BASE}/wallet`, { method: 'POST', headers: authHeaders({ 'Content-Type': 'application/json' }), body: JSON.stringify(item) }).then(r => j<WalletItem>(r)),
   walletList: () => fetch(`${API_BASE}/wallet`, { headers: authHeaders() }).then(r => j<WalletItem[]>(r)),
   walletSummary: () => fetch(`${API_BASE}/wallet/summary`, { headers: authHeaders() }).then(r => j<WalletSummary>(r)),

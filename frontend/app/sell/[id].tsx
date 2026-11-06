@@ -9,6 +9,7 @@ import {theme} from "@/src/theme";
 import PressableScale from "@/src/components/PressableScale";
 import {useAuth} from "@/src/auth";
 import {useSettings} from "@/src/i18n/SettingsContext";
+import SellingCoach from "@/src/components/SellingCoach";
 
 export default function SellReview(){
  const {id}=useLocalSearchParams<{id:string}>(); const router=useRouter(); const {user}=useAuth(); const {formatMoney}=useSettings();
@@ -39,6 +40,7 @@ export default function SellReview(){
   <Label text="Category"/><TextInput value={category} onChangeText={setCategory} style={s.input}/>
   <Label text="Approximate location"/><TextInput value={location} onChangeText={setLocation} placeholder="City / area" placeholderTextColor={theme.color.textFaint} style={s.input}/>
   {!!error&&<Text style={s.err}>{error}</Text>}
+  <SellingCoach input={{title,description:desc,price:Number(price)||item.listing.price,category,photo_count:(item.photos?.length||1),value_low:item.market_low,value_high:item.market_high}}/>
   <View style={s.notice}><Ionicons name="shield-checkmark-outline" size={18} color={theme.color.lime}/><Text style={s.noticeTxt}>Your asking price is shown separately from Vendo's AI estimate. You can unpublish or mark the item sold at any time.</Text></View>
   <PressableScale onPress={publish} disabled={busy} hapticStyle="heavy" style={s.publish}><Ionicons name="storefront" size={19} color={theme.color.onLime}/><Text style={s.publishTxt}>{busy?'Publishing…':'Publish on Vendo'}</Text></PressableScale>
  </ScrollView></KeyboardAvoidingView></SafeAreaView>

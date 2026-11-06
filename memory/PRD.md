@@ -55,3 +55,7 @@ The app has moved well beyond the original V1 mock. Now delivered & verified:
 - Personal inventory (not real money). Collection `wallet_items` (user_id, title, description, photo_url, value_low, value_high, currency=EUR base, category, condition, created_at).
 - Endpoints (auth, owner-only): POST/GET /api/wallet, GET /api/wallet/summary, GET/DELETE /api/wallet/{id}. Account deletion removes wallet items.
 - Frontend: Wallet tab app/(tabs)/wallet.tsx, detail app/wallet/[id].tsx, "Save to My Wallet" on scan results; "List on VENDO" creates a draft item and opens /sell/[id].
+
+## Selling Coach (June 2026)
+- POST /api/coach/tips (auth): Gemini 3 Flash, JSON-only, validated 3-4 tips {type,title,body}; 10 calls/user/hour via `coach_calls`; failure/limit -> empty list (card hides). Account deletion clears coach_calls.
+- Component src/components/SellingCoach.tsx shown on scan results and sell form (/sell/[id]); loads on mount + Refresh button.

@@ -21,6 +21,7 @@ import { dictionaries } from "@/src/i18n";
 import { useAuth } from "@/src/auth";
 import PressableScale from "@/src/components/PressableScale";
 import SellScoreRing from "@/src/components/SellScoreRing";
+import SellingCoach from "@/src/components/SellingCoach";
 
 type Phase = "idle" | "preview" | "analyzing" | "results" | "error";
 
@@ -532,6 +533,18 @@ export default function ScanScreen() {
                 </Text>
               </View>
             </Animated.View>
+
+            <SellingCoach
+              input={{
+                title: previewItem.listing.title,
+                description: previewItem.listing.description,
+                price: previewItem.listing.price,
+                category: previewItem.category,
+                photo_count: previewItem.photos?.length || 1,
+                value_low: previewItem.market_low,
+                value_high: previewItem.market_high,
+              }}
+            />
 
             <Animated.View entering={FadeInDown.duration(360).delay(420)}>
               <PressableScale

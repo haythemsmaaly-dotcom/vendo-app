@@ -184,6 +184,12 @@ export const en = {
     disclaimerBody: "Vendo copies your listing to the clipboard. Once {app} opens, paste it to create the listing. Vendo does not publish automatically.",
     openNow: "Open {app}",
   },
+  coach: {
+    title: "Selling Coach",
+    disclaimer: "Suggestions only. Not guaranteed to increase your sale price.",
+    loading: "Preparing tips…",
+    refresh: "Refresh tips",
+  },
   wallet: {
     tab: "Wallet",
     title: "My VENDO Wallet",

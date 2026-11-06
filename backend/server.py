@@ -403,6 +403,7 @@ async def delete_account(user: dict = Depends(current_user)):
     await db.messages.delete_many({"$or": [{"buyer_id": uid}, {"seller_id": uid}, {"listing_id": {"$in": owned_ids}}]})
     await db.reports.delete_many({"reporter_id": uid})
     await db.wallet_items.delete_many({"user_id": uid})
+    await db.coach_calls.delete_many({"user_id": uid})
     if owned_ids:
         await db.reports.delete_many({"listing_id": {"$in": owned_ids}})
     await db.users.delete_one({"id": uid})
@@ -809,6 +810,71 @@ async def analyze_item(req: AnalyzeRequest, user: dict = Depends(current_user)):
     except Exception as e:
         logger.exception("Vision response validation failed")
         raise HTTPException(status_code=502, detail=f"Invalid vision output: {e}")
+
+
+# --------- Selling Coach (optional AI tips, never blocking) ---------
+class CoachRequest(BaseModel):
+    title: str = ""
+    description: str = ""
+    price: float = 0
+    category: str = ""
+    photo_count: int = 1
+    value_low: Optional[float] = None
+    value_high: Optional[float] = None
+    locale: str = "fr"
+
+
+COACH_LIMIT_PER_HOUR = 10
+COACH_TYPES = {"photo", "price", "description", "title"}
+
+COACH_PROMPT = """You are VENDO's Selling Coach for second-hand listings. Give 3 to 4 short, practical tips that improve the listing below.
+Tip types allowed: "photo" (missing angles, lighting), "price" (asking price vs the estimated range), "description" (details worth adding: condition, size, accessories, battery health, proof of purchase), "title" (title improvements).
+Rules: each tip has a "title" (max 6 words) and a "body" (ONE sentence, max 25 words). Never promise a sale price, a sale speed, or guaranteed results. Only mention price if it is clearly outside or at the edge of the range, and never quote amounts or currency symbols (say "above/below the estimated range"). Write in {lang}.
+Return ONLY valid JSON, no markdown: {{"tips":[{{"type":"photo|price|description|title","title":"...","body":"..."}}]}}
+
+Listing:
+- Title: {title}
+- Category: {category}
+- Asking price (EUR): {price}
+- Estimated range (EUR): {low} - {high}
+- Photos: {photos}
+- Description: {description}"""
+
+
+@api_router.post("/coach/tips")
+async def coach_tips(req: CoachRequest, user: dict = Depends(current_user)):
+    api_key = os.environ.get("EMERGENT_LLM_KEY", "")
+    since = time.time() - 3600
+    used = await db.coach_calls.count_documents({"user_id": user["id"], "ts": {"$gte": since}})
+    if not api_key or used >= COACH_LIMIT_PER_HOUR:
+        return {"tips": [], "limited": used >= COACH_LIMIT_PER_HOUR}
+    await db.coach_calls.insert_one({"user_id": user["id"], "ts": time.time()})
+    en = (req.locale or "").lower().startswith("en")
+    prompt = COACH_PROMPT.format(
+        lang="English" if en else "French",
+        title=req.title[:200], category=req.category[:60], price=round(req.price, 2),
+        low=req.value_low if req.value_low is not None else "unknown",
+        high=req.value_high if req.value_high is not None else "unknown",
+        photos=max(0, min(req.photo_count, 10)), description=req.description[:1500],
+    )
+    try:
+        chat = LlmChat(api_key=api_key, session_id=f"vendo-coach-{uuid.uuid4().hex[:8]}",
+                       system_message="You return only JSON.").with_model("gemini", "gemini-3-flash-preview")
+        response = await chat.send_message(UserMessage(text=prompt))
+        data = _extract_json(response if isinstance(response, str) else str(response)) or {}
+        tips = []
+        for t in data.get("tips", []) if isinstance(data.get("tips"), list) else []:
+            if not isinstance(t, dict):
+                continue
+            title, body = str(t.get("title") or "").strip(), str(t.get("body") or "").strip()
+            if not title or not body:
+                continue
+            ttype = str(t.get("type") or "").lower()
+            tips.append({"type": ttype if ttype in COACH_TYPES else "description", "title": title[:60], "body": body[:200]})
+        return {"tips": tips[:4], "limited": False}
+    except Exception:
+        logger.exception("Selling coach failed")
+        return {"tips": [], "limited": False}
 
 
 app.include_router(api_router)
